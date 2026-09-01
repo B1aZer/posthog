@@ -2266,6 +2266,10 @@ export type HogFlowsMetricsRetrieveParams = {
      * @minLength 1
      */
     name?: string
+    /**
+     * Read one workflow version's metrics instead of the workflow's whole history. Workflow metrics only; ignored elsewhere. Use it to compare a change against the version before it.
+     */
+    version?: number
 }
 
 export type HogFlowsMetricsRetrieveBreakdownBy =
@@ -2328,6 +2332,10 @@ export type HogFlowsMetricsTotalsRetrieveParams = {
      * @minLength 1
      */
     name?: string
+    /**
+     * Read one workflow version's metrics instead of the workflow's whole history. Workflow metrics only; ignored elsewhere. Use it to compare a change against the version before it.
+     */
+    version?: number
 }
 
 export type HogFlowsMetricsTotalsRetrieveBreakdownBy =
