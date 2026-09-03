@@ -295,6 +295,12 @@ class SignalReport(UUIDModel):
     # nothing. Null means no completed pass has recorded it, which covers reports researched before
     # the column existed; read `researched_signal_count`, which reconstructs it from `signals_at_run`.
     signals_researched = models.IntegerField(null=True, blank=True)
+    # The research pass whose summary the report's current implementation PR was built from. A later
+    # pass may supersede that PR, but only once: auto-start creates a replacement only when
+    # `run_count` has moved past this, which is what stops one decision opening two pull requests.
+    # Null for reports implemented before superseding existed — safe, because those reports also have
+    # no `implementation_decision` artefact and the supersede path requires one.
+    implemented_at_run_count = models.IntegerField(null=True, blank=True)
 
     # LLM-generated during signal matching
     title = models.TextField(null=True, blank=True)
@@ -1041,6 +1047,7 @@ class SignalReportArtefact(UUIDModel):
         WORK_CLAIM = "work_claim"
         WORK_RELEASE = "work_release"
         PULL_REQUEST = "pull_request"
+        IMPLEMENTATION_DECISION = "implementation_decision"
 
     # Every artefact is an append-only, point-in-time log entry — nothing is mutated in place by
     # the producers. The two sets below classify *what an entry means*, not how it is written:
@@ -1061,6 +1068,7 @@ class SignalReportArtefact(UUIDModel):
             ArtefactType.REPO_SELECTION,
             ArtefactType.SUGGESTED_REVIEWERS,
             ArtefactType.CHANNEL_ASSIGNMENT,
+            ArtefactType.IMPLEMENTATION_DECISION,
         }
     )
     LOG_ARTEFACT_TYPES: frozenset[str] = frozenset(
