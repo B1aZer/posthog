@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { isInteractiveTarget, triageEnterAction } from "./ReportTriageFocus";
+import { isInteractiveTarget, triageEnterAction } from "../triageKeyboard";
 
 describe("isInteractiveTarget", () => {
   function firstEl(html: string): HTMLElement {
