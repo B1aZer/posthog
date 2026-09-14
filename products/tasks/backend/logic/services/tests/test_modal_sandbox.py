@@ -2391,13 +2391,23 @@ def _requests_gateway_error() -> Exception:
     return RequestsProxyError("Tunnel connection failed: 503 Service Unavailable")
 
 
+def _requests_embedded_gateway_error() -> Exception:
+    # A status the marker phrases do not name, buried in the proxy's own prose.
+    return RequestsProxyError("Tunnel connection failed: 500 Internal Server Error")
+
+
 def _modal_wrapped_gateway_error() -> Exception:
     error = ModalConnectionError("failed to connect to the modal control plane")
     error.__cause__ = SocksProxyError("502 Bad gateway", error_code=502)
     return error
 
 
-GATEWAY_ERRORS = [_socks_gateway_error, _requests_gateway_error, _modal_wrapped_gateway_error]
+GATEWAY_ERRORS = [
+    _socks_gateway_error,
+    _requests_gateway_error,
+    _requests_embedded_gateway_error,
+    _modal_wrapped_gateway_error,
+]
 
 
 def _running_process(exit_code: int = 0) -> Any:

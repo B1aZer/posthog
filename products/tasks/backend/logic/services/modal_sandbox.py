@@ -143,8 +143,8 @@ TRANSIENT_SNAPSHOT_ERRORS: tuple[type[BaseException], ...] = (
 
 DIRECTORY_SNAPSHOT_TIMEOUT_SECONDS = 240
 
-PROXY_RATE_LIMIT_MARKERS = ("429", "too many requests")
-PROXY_UNAVAILABLE_MARKERS = ("502", "bad gateway", "503", "service unavailable", "504", "gateway timeout")
+PROXY_RATE_LIMIT_MARKERS = ("too many requests",)
+PROXY_UNAVAILABLE_MARKERS = ("bad gateway", "service unavailable", "gateway timeout")
 PROXY_ERROR_TYPES: tuple[type[BaseException], ...] = (SocksProxyError, requests.exceptions.ProxyError)
 _MAX_PROXY_ERROR_CHAIN_DEPTH = 10
 # The proxy answers a refused CONNECT with a bare status line ("502 Bad gateway"), which
@@ -155,6 +155,9 @@ _MAX_PROXY_ERROR_CHAIN_DEPTH = 10
 # of output were truncated") is not read as a control-plane failure. A status buried inside a
 # longer message is left to `error_code` or the markers below.
 _PROXY_STATUS_LINE = re.compile(r"\s*(\d{3})\s+[A-Za-z]+(?: [A-Za-z]+){0,2}\s*")
+# A proxy error wraps the CONNECT reply in its own prose ("Tunnel connection failed: 500
+# Internal Server Error"), so the status has to be read out of the middle of the message.
+_EMBEDDED_PROXY_STATUS = re.compile(r"\b([45]\d{2})\b")
 
 ControlPlaneFailure = Literal["rate_limited", "unavailable"]
 
@@ -172,14 +175,17 @@ def _classify_control_plane_failure(error: BaseException) -> ControlPlaneFailure
     if not isinstance(status, int):
         status_line = _PROXY_STATUS_LINE.fullmatch(message)
         status = int(status_line.group(1)) if status_line else None
+    # A proxy error only ever wraps a CONNECT reply, never command output, so its message is
+    # safe to search for a status the wrapper did not expose structurally.
+    if status is None and isinstance(error, PROXY_ERROR_TYPES):
+        embedded = _EMBEDDED_PROXY_STATUS.search(message)
+        status = int(embedded.group(1)) if embedded else None
 
     if status == HTTPStatus.TOO_MANY_REQUESTS:
         return "rate_limited"
     if status is not None and 500 <= status < 600:
         return "unavailable"
-    # A proxy error only ever wraps a CONNECT reply, never command output, so its message is
-    # safe to search for a status the wrapper did not expose structurally (`requests` proxy
-    # errors bury one in prose).
+    # A proxy that names the reason but not the status.
     if isinstance(error, PROXY_ERROR_TYPES):
         folded = message.casefold()
         if any(marker in folded for marker in PROXY_RATE_LIMIT_MARKERS):
