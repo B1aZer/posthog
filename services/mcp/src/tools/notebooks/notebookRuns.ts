@@ -9,7 +9,7 @@ import {
     sleep,
     type ShapedRunResult,
 } from './cellRuns'
-import { findCellTag, readStringProp, replaceCellTag, upsertProp } from './cellTags'
+import { findCellTag, replaceCellTag, upsertProp } from './cellTags'
 import { applyMarkdownEdit } from './markdownDoc'
 
 export interface NotebookRunCellOutcome {
@@ -48,12 +48,6 @@ const TERMINAL_CELL_STATUSES = new Set(['done', 'failed', 'interrupted'])
  * megabytes. A normal poll finds far fewer than this, so it still saves once.
  */
 const MAX_CELLS_PER_SAVE = 10
-
-/** A cell result already written into the document, keyed by the run that produced it. */
-function alreadyWritten(markdown: string, nodeId: string, runId: string): boolean {
-    const block = findCellTag(markdown, nodeId)
-    return !!block && readStringProp(block.source, 'runId') === runId
-}
 
 /**
  * Wait for a whole-notebook run, writing each cell's result into the document as it lands.
@@ -146,15 +140,15 @@ async function writeCellBatch(
         envelopes.push({ nodeId: cell.node_id, runId: cellRunId, envelope })
     }
 
+    // Every landed cell is written, including one whose run id the document already carries:
+    // a stopped cell becomes terminal with no result, and the real one lands after. Repeating
+    // a result the document holds costs no save, because applyMarkdownEdit skips a transform
+    // that changes nothing.
     await applyMarkdownEdit(context, notebookId, (current) => {
         let markdown = current
         for (const { nodeId, runId: cellRunId, envelope } of envelopes) {
-            // A cell deleted while the run worked has nowhere for its result to land, and a
-            // cell already carrying this run's result must not be written twice.
-            if (alreadyWritten(markdown, nodeId, cellRunId)) {
-                continue
-            }
             const block = findCellTag(markdown, nodeId)
+            // A cell deleted while the run worked has nowhere for its result to land.
             if (!block) {
                 continue
             }

@@ -786,7 +786,9 @@ describe('notebook cell tools', () => {
         expect(result.hint).toContain('notebooks-run-status')
     })
 
-    it('run status leaves a result the document already carries alone', async () => {
+    it('run status writes a result the document lacks, then leaves it alone', async () => {
+        // A stopped cell reaches the document with its run id and no result, because the
+        // real one arrives after. Reading the run id as proof of a result strands it there.
         const state = makeState(
             ['# Doc', '', '<SQLV2 nodeId="first" code="select 1" returnVariable="df" runId="cell-1" />', ''].join('\n')
         )
@@ -794,12 +796,16 @@ describe('notebook cell tools', () => {
         state.runStatusResponses.push(DONE_STATUS)
         const context = createMockContext(state)
 
-        const result: any = await runNotebookStatusHandler(context, {
-            notebook_id: 'aBcD1234',
-            run_id: 'nbrun-1',
-        })
+        await runNotebookStatusHandler(context, { notebook_id: 'aBcD1234', run_id: 'nbrun-1' })
+
+        expect(state.saveBodies).toHaveLength(1)
+        expect(state.saveBodies[0].content.content[0].attrs.markdown).toContain('result=')
+
+        state.notebookRunStatuses.push(notebookRunStatus('done', [runCell('first', 'df', 'done', 'cell-1')]))
+        state.runStatusResponses.push(DONE_STATUS)
+        const result: any = await runNotebookStatusHandler(context, { notebook_id: 'aBcD1234', run_id: 'nbrun-1' })
 
         expect(result.status).toBe('done')
-        expect(state.saveBodies).toHaveLength(0)
+        expect(state.saveBodies).toHaveLength(1)
     })
 })
