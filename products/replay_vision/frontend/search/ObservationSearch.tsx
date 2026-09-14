@@ -59,7 +59,7 @@ function SearchPrompt({
     return (
         <label
             htmlFor={inputId}
-            className="input-like flex items-center gap-2 relative w-full bg-fill-input rounded-lg py-1 pl-3 pr-1"
+            className="input-like border-secondary flex items-center gap-2 relative w-full bg-fill-input rounded-lg py-1 pl-3 pr-1"
         >
             <input
                 id={inputId}

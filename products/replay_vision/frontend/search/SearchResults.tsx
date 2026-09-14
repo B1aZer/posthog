@@ -62,7 +62,10 @@ function SearchResultCard({
     // The stored prose keeps its `(t 12)` markers, and the snippet has no seek controls to spend them on.
     const snippet = stripCitations(result.matched_content)
     return (
-        <div className="border rounded p-3 bg-surface-primary space-y-2 text-primary" data-attr="vision-search-result">
+        <div
+            className="border border-secondary rounded p-3 bg-surface-primary space-y-2 text-primary"
+            data-attr="vision-search-result"
+        >
             <div className="flex items-center gap-2 min-w-0">
                 {showScanner && (
                     <>
@@ -89,7 +92,7 @@ function SearchResultCard({
                 <div className="text-sm text-secondary line-clamp-2">
                     {snippetSegments(snippet, searchedQuery).map((segment, index) =>
                         segment.highlighted ? (
-                            <span key={index} className="font-semibold text-accent">
+                            <span key={index} className="font-semibold text-secondary">
                                 {segment.text}
                             </span>
                         ) : (
