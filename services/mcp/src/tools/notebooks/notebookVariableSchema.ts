@@ -1,6 +1,6 @@
 import { z } from 'zod'
 
-import { DATAFRAME_NAME_REGEX } from './cellTags'
+import { type CellTagBlock, DATAFRAME_NAME_REGEX } from './cellTags'
 
 /** Mirrors MAX_VARIABLES_PER_NOTEBOOK in sql_v2_serializers.py, so the schema stops at the server's limit. */
 export const MAX_NOTEBOOK_VARIABLES = 10
@@ -27,3 +27,18 @@ export const NotebookVariableSchema = z
     .strict()
 
 export type NotebookVariableInput = z.infer<typeof NotebookVariableSchema>
+
+/**
+ * A Python cell reads variables and cell dataframes out of one kernel namespace, so a shared
+ * name means one silently clobbers the other. The server stores such a declaration; the editor
+ * refuses it, and so does every tool that writes one.
+ */
+export function assertNoDataframeNameCollision(variables: NotebookVariableInput[], cells: CellTagBlock[]): void {
+    const dataframeNames = new Set(cells.map((cell) => cell.returnVariable).filter(Boolean))
+    const conflicts = variables.map((variable) => variable.name).filter((name) => dataframeNames.has(name))
+    if (conflicts.length) {
+        throw new Error(
+            `${conflicts.join(', ')} ${conflicts.length === 1 ? 'is' : 'are'} already a cell's dataframe_name. Pick another variable name or rename the cell.`
+        )
+    }
+}

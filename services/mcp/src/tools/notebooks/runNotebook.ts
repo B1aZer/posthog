@@ -5,10 +5,15 @@ import { getPostHogClient } from '@/lib/posthog'
 import type { Context, ToolBase } from '@/tools/types'
 
 import { wrapRunResultAsInformational } from './cellRuns'
-import { notebookPathFor } from './markdownDoc'
+import { parseCellTags } from './cellTags'
+import { fetchMarkdownNotebook, notebookPathFor } from './markdownDoc'
 import { awaitNotebookRun, type NotebookRunOutcome } from './notebookRuns'
 import { NOTEBOOK_SHORT_ID_DESCRIPTION, notebookIdAliases } from './notebookId'
-import { MAX_NOTEBOOK_VARIABLES, NotebookVariableSchema } from './notebookVariableSchema'
+import {
+    assertNoDataframeNameCollision,
+    MAX_NOTEBOOK_VARIABLES,
+    NotebookVariableSchema,
+} from './notebookVariableSchema'
 
 const RunNotebookInputSchema = z
     .object({
@@ -38,6 +43,13 @@ export const runNotebookHandler: ToolBase<typeof NotebooksRunSchema, NotebookRun
 ) => {
     const projectId = await context.stateManager.getProjectId()
     const notebookPath = notebookPathFor(projectId, params.notebook_id)
+
+    if (params.variables?.length) {
+        // The run saves these variables and then binds them, so the collision has to be caught
+        // before the start: every cell reports done and the numbers are quietly wrong.
+        const { markdown } = await fetchMarkdownNotebook(context, params.notebook_id)
+        assertNoDataframeNameCollision(params.variables, parseCellTags(markdown))
+    }
 
     const started = await context.api.request<Schemas.NotebookRunStartResponse>({
         method: 'POST',

@@ -6,7 +6,12 @@ import type { Context, ToolBase } from '@/tools/types'
 
 import { parseCellTags, variableReaders } from './cellTags'
 import { fetchMarkdownNotebook } from './markdownDoc'
-import { MAX_NOTEBOOK_VARIABLES, NotebookVariableSchema, type NotebookVariableInput } from './notebookVariableSchema'
+import {
+    assertNoDataframeNameCollision,
+    MAX_NOTEBOOK_VARIABLES,
+    NotebookVariableSchema,
+    type NotebookVariableInput,
+} from './notebookVariableSchema'
 
 export const NotebooksSetVariablesSchema = z
     .object({
@@ -51,16 +56,7 @@ export const setVariablesHandler: ToolBase<typeof NotebooksSetVariablesSchema, S
     const initial = await fetchMarkdownNotebook(context, params.notebook_id)
     const cells = parseCellTags(initial.markdown)
 
-    // A Python cell reads variables and cell dataframes out of one kernel namespace, so a shared
-    // name means one silently clobbers the other. The server stores such a declaration; the editor
-    // refuses it, and so does this tool.
-    const dataframeNames = new Set(cells.map((cell) => cell.returnVariable).filter(Boolean))
-    const conflicts = params.variables.map((variable) => variable.name).filter((name) => dataframeNames.has(name))
-    if (conflicts.length) {
-        throw new Error(
-            `${conflicts.join(', ')} ${conflicts.length === 1 ? 'is' : 'are'} already a cell's dataframe_name. Pick another variable name or rename the cell.`
-        )
-    }
+    assertNoDataframeNameCollision(params.variables, cells)
 
     const saved = await context.api.request<Schemas.Notebook>({
         method: 'PATCH',

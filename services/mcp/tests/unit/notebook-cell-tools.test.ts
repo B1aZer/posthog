@@ -725,6 +725,23 @@ describe('notebook cell tools', () => {
         })
     })
 
+    it('run notebook refuses a variable that reuses a cell dataframe name', async () => {
+        // A Python cell reads variables and cell dataframes out of one kernel namespace, so the
+        // run would bind one over the other and report a plausible wrong number as done.
+        const state = makeState(RUN_MARKDOWN)
+        const context = createMockContext(state)
+
+        await expect(
+            runNotebookHandler(context, {
+                notebook_id: 'aBcD1234',
+                wait: true,
+                variables: [{ name: 'df', type: 'string', value: 'x' }],
+            })
+        ).rejects.toThrow("already a cell's dataframe_name")
+
+        expect(state.notebookRunStartBodies).toHaveLength(0)
+    })
+
     it('run notebook reports the cell that stopped the run and why the run stopped', async () => {
         const state = makeState(RUN_MARKDOWN)
         state.notebookRunStatuses.push(
