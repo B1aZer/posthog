@@ -8,6 +8,7 @@ of the endpoint that creates its record — see `notebook_run.md`.
 
 from ..notebook_run import (
     NotebookRunAlreadyRunning as NotebookRunAlreadyRunning,
+    NotebookRunCellInvalid as NotebookRunCellInvalid,
     NotebookRunNothingToRun as NotebookRunNothingToRun,
     finish_notebook_run as finish_notebook_run,
     get_notebook_run as get_notebook_run,

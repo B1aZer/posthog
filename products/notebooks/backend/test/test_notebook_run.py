@@ -6,6 +6,8 @@ from unittest.mock import patch
 
 from django.utils.timezone import now
 
+from parameterized import parameterized
+
 from posthog.models.scoping import team_scope
 from posthog.models.utils import UUIDT
 
@@ -60,6 +62,26 @@ class TestNotebookRunEndpoints(APIBaseTest):
         assert response.status_code == 400, response.json()
         assert "nothing to run" in response.json()["detail"]
         mock_start.assert_not_called()
+
+    @parameterized.expand(
+        [
+            ("malformed_connection_id", '<SQLV2 nodeId="s1" code="select 1" connectionId="not-a-uuid" />\n'),
+            ("over_long_node_id", f'<SQLV2 nodeId="{"n" * 200}" code="select 1" />\n'),
+        ]
+    )
+    def test_a_cell_the_dispatch_cannot_use_is_refused(self, mock_start, _flag, _name, cell) -> None:
+        # A notebook save checks neither identifier, so both reach the plan as written. Past
+        # the plan they surface only as a retried database error inside the workflow.
+        notebook = Notebook.objects.create(team=self.team, short_id="nbrunbad", content=markdown_content(cell))
+
+        response = self.client.post(
+            f"/api/projects/{self.team.id}/notebooks/{notebook.short_id}/runs/", data={}, format="json"
+        )
+
+        assert response.status_code == 400, response.json()
+        mock_start.assert_not_called()
+        with team_scope(self.team.id):
+            assert not NotebookRun.objects.filter(notebook=notebook).exists()
 
     def test_a_second_run_while_one_is_active_is_refused(self, _start, _flag) -> None:
         assert self.client.post(self.runs_url, data={}, format="json").status_code == 200

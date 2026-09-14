@@ -202,6 +202,9 @@ class KernelRuntime(UUIDTModel):
         ]
 
 
+MAX_NODE_ID_LENGTH = 128
+
+
 class NotebookRun(TeamScopedRootMixin, UUIDModel):
     """One execution of a whole markdown notebook: every runnable cell, in document order.
 
@@ -245,7 +248,7 @@ class NotebookRun(TeamScopedRootMixin, UUIDModel):
     cell_plan: JSONField = JSONField(default=list, blank=True)
     # How far through `cell_plan` the orchestrator is; the status endpoint reads it.
     current_index = models.IntegerField(default=0, db_default=0)
-    failed_node_id = models.CharField(max_length=128, null=True, blank=True)
+    failed_node_id = models.CharField(max_length=MAX_NODE_ID_LENGTH, null=True, blank=True)
     error = models.TextField(null=True, blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
@@ -305,7 +308,7 @@ class NotebookNodeRun(TeamScopedRootMixin, UUIDModel):
         db_index=False,
         related_name="+",
     )
-    node_id = models.CharField(max_length=128)
+    node_id = models.CharField(max_length=MAX_NODE_ID_LENGTH)
     # The whole-notebook run that dispatched this cell, or null for a single-cell run. SET_NULL
     # rather than CASCADE: a run record is bookkeeping, and deleting one must not take the
     # results it produced with it.

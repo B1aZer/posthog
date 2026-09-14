@@ -72,6 +72,7 @@ from products.notebooks.backend.facade.compute_pricing import (
 from products.notebooks.backend.facade.contracts import NotebookRunBusy, TeamRunCapacityFull
 from products.notebooks.backend.facade.notebook_run import (
     NotebookRunAlreadyRunning,
+    NotebookRunCellInvalid,
     NotebookRunInput,
     NotebookRunNothingToRun,
     finish_notebook_run,
@@ -1666,7 +1667,7 @@ class NotebookViewSet(TeamAndOrgViewSetMixin, AccessControlViewSetMixin, ForbidD
                     # A session cookie is the editor; anything else is a programmatic client.
                     trigger=classify_request_source(request)[0],
                 )
-        except NotebookRunNothingToRun as e:
+        except (NotebookRunNothingToRun, NotebookRunCellInvalid) as e:
             return Response({"detail": str(e)}, status=400)
         except NotebookRunAlreadyRunning as e:
             # 409, not 429: a conflict with the notebook's state rather than a rate — the same

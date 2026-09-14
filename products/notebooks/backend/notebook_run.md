@@ -56,6 +56,7 @@ Interrupt only stops a run, so notebook write access is enough for it.
 
 - `POST runs/` with `variables` saves them through the notebook's own serializer first, so a run and a plain PATCH apply the same limits and the same duplicate-name rule. The run then snapshots what the notebook holds. The save and the run record share one transaction, so a refused run leaves the variables untouched.
 - A notebook with no runnable cell returns 400. A notebook that already has a run returns 409.
+- A cell whose stored `nodeId` or `connectionId` the dispatch cannot use also returns 400, the same as the single-cell endpoint. Neither field is checked when a notebook is saved, so the plan is the first place the run can refuse them.
 - `starts_sandbox` is true when the plan holds a Python cell and no kernel is live for the caller. Both clients must tell the user the hourly price.
 - `GET runs/{run_id}/` is cheap: no result envelopes. A client fetches the one cell it wants from `GET sql_v2/runs/{run_id}`.
 

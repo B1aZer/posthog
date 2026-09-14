@@ -22,7 +22,7 @@ import structlog
 from posthog.dataclasses import frozen
 from posthog.models import Team, User
 
-from products.notebooks.backend.models import Notebook, NotebookNodeRun, NotebookRun
+from products.notebooks.backend.models import MAX_NODE_ID_LENGTH, Notebook, NotebookNodeRun, NotebookRun
 from products.notebooks.backend.sql_v2 import SQLV2KernelNotRunning, interrupt_sql_v2_run
 from products.notebooks.backend.sql_v2_direct import cancel_direct_run
 from products.notebooks.backend.sql_v2_dispatch import NodeRunRequest, RefSpec, sandbox_disclosure
@@ -45,6 +45,10 @@ _NOTHING_TO_RUN = (
     "This notebook has no SQL or Python cells with code in them, so there is nothing to run. Add a cell first."
 )
 _ALREADY_RUNNING = "This notebook is already running. Wait for it to finish, or stop it first."
+_CELL_NOT_DISPATCHABLE = (
+    "A cell in this notebook has an identifier this run cannot use, so nothing was started. "
+    "Open the notebook in the editor and save it again, then run it."
+)
 
 
 class PlannedCell(TypedDict):
@@ -64,6 +68,10 @@ class NotebookRunNothingToRun(Exception):
 
 class NotebookRunAlreadyRunning(Exception):
     """A whole-notebook run is already in flight for this notebook."""
+
+
+class NotebookRunCellInvalid(Exception):
+    """A planned cell carries an identifier the dispatch cannot use."""
 
 
 @frozen
@@ -101,6 +109,27 @@ def plan_notebook_cells(notebook: Notebook) -> list[PlannedCell]:
     ]
 
 
+def _assert_plan_is_dispatchable(cell_plan: list[PlannedCell]) -> None:
+    """Refuse a plan whose stored identifiers the dispatch cannot use.
+
+    The document reader keeps whatever `nodeId` and `connectionId` the markdown holds, and a
+    notebook save checks neither, so both reach the plan as written. The single-cell endpoint
+    rejects the same connection id through its serializer. Checking here keeps the two paths
+    consistent, and it is the last point where the caller still gets an answer: past it, a bad
+    identifier surfaces only as a retried database error inside the workflow.
+    """
+    for cell in cell_plan:
+        if len(cell["node_id"]) > MAX_NODE_ID_LENGTH:
+            raise NotebookRunCellInvalid(_CELL_NOT_DISPATCHABLE)
+        connection_id = cell["connection_id"]
+        if connection_id is None:
+            continue
+        try:
+            UUID(connection_id)
+        except ValueError as e:
+            raise NotebookRunCellInvalid(_CELL_NOT_DISPATCHABLE) from e
+
+
 def start_notebook_run(
     notebook: Notebook,
     user: User | None,
@@ -117,6 +146,7 @@ def start_notebook_run(
     cell_plan = plan_notebook_cells(notebook)
     if not cell_plan:
         raise NotebookRunNothingToRun(_NOTHING_TO_RUN)
+    _assert_plan_is_dispatchable(cell_plan)
 
     try:
         # The savepoint keeps the IntegrityError from poisoning a caller's transaction: the
@@ -331,6 +361,7 @@ def active_notebook_run(team_id: int, notebook: Notebook) -> NotebookRun | None:
 __all__ = [
     "OUTCOME_TIMED_OUT",
     "NotebookRunAlreadyRunning",
+    "NotebookRunCellInvalid",
     "NotebookRunNothingToRun",
     "NotebookRunStart",
     "active_notebook_run",
