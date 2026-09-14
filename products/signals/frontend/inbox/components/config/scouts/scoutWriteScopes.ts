@@ -2,7 +2,7 @@
 export interface ScoutWriteScopeRow {
     scope: string
     /** Heading the row sits under. Purely a label: the API stores a flat list of scopes. */
-    group: 'Analytics' | 'Monitoring' | 'Scouts and skills' | 'Data'
+    group: 'Analytics' | 'Monitoring' | 'Scouts and skills' | 'Data' | 'Workflows'
     label: string
     description: string
 }
@@ -59,6 +59,13 @@ export const SCOUT_WRITE_SCOPE_ROWS: ScoutWriteScopeRow[] = [
         group: 'Data',
         label: 'Warehouse tables',
         description: 'Create tables, refresh their schema, and manage data quality checks on them',
+    },
+    {
+        scope: 'hog_flow_proposal:write',
+        group: 'Workflows',
+        label: 'Workflow suggestions',
+        description:
+            'Suggest changes to workflows whose owner turned suggestions on. A person approves or rejects each one; the scout cannot publish',
     },
 ]
 

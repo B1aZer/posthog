@@ -177,10 +177,6 @@ CONTEXT_LAYER_INTERNAL_SCOPE = "context_layer_internal:write"
 # practice; tool-level (create-only) restriction isn't cheap in the current sandbox wiring.
 SCOUT_USER_WRITE_SCOPES: list[str] = [
     "notebook:write",
-    # Suggesting a workflow change, which a person then approves or rejects. Deliberately not
-    # `hog_flow:write`: that also publishes, updates and test-sends a workflow, so an autonomous run
-    # holding it could put mail in front of real people. This scope can only queue a suggestion.
-    "hog_flow_proposal:write",
 ]
 
 
@@ -232,6 +228,13 @@ SCOUT_USER_WRITE_SCOPES: list[str] = [
 #                          recoverable soft-delete that refuses a table a source owns. Deleting
 #                          a data quality check is the one PERMANENT delete in this set, and a
 #                          check is cheap to recreate.
+#   hog_flow_proposal:write
+#                          Queue a suggested change on a workflow whose owner opted in, for a
+#                          person to approve or reject. Deliberately not `hog_flow:write`, which
+#                          also publishes, updates and test-sends a workflow: this scope can put
+#                          nothing in front of anyone. Creates only; a suggestion is resolved by
+#                          a person. The workflows scout declares it in its SKILL.md
+#                          (`scout-write-scopes`), so no other scout holds it unless granted.
 #
 # `annotation:write` and `alert:write` exceed the "recoverable, project-scoped" bar the other
 # scopes meet. They stay in the v1 set that #94263 puts to the team, because narrowing the set is
@@ -248,6 +251,7 @@ SCOUT_GRANTABLE_WRITE_SCOPES: frozenset[str] = frozenset(
         "llm_skill:write",
         "warehouse_view:write",
         "warehouse_table:write",
+        "hog_flow_proposal:write",
     }
 )
 
