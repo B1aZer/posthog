@@ -94,6 +94,18 @@ export interface SummaryChangeContent {
 export interface ImplementationDecisionContent {
     supersede?: boolean
     reason?: string
+    targets?: { pr_url: string }[]
+}
+
+export interface ImplementationReplacementContent {
+    decision: ImplementationDecisionContent
+}
+
+export interface ImplementationHandoverContent {
+    status: 'processing' | 'completed' | 'failed' | 'cancelled' | 'needs_attention'
+    explanation?: string
+    replacement_pr_urls?: string[]
+    results?: Record<string, 'closed' | 'already_closed' | 'skipped'>
 }
 
 // ── Type labels ──────────────────────────────────────────────────────────────────────────────
@@ -118,6 +130,8 @@ export const ARTEFACT_TYPE_LABELS: Record<string, string> = {
     related_to: 'Related report',
     code_review: 'Code review',
     implementation_decision: 'Open PR assessed',
+    implementation_replacement: 'Replacement started',
+    implementation_handover: 'Replacement outcome',
 }
 
 export function artefactTypeLabel(type: string): string {
