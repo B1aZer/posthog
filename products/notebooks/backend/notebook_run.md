@@ -44,7 +44,9 @@ Rules the loop follows:
 
 ## Endpoints
 
-All three are gated on `revamped-py-notebooks`, the same way `sql_v2/run` is, and all three need query access.
+All three are gated on `revamped-py-notebooks`, the same way `sql_v2/run` is.
+Start and status also need query access: one runs the cells, the other reads their errors.
+Interrupt only stops a run, so notebook write access is enough for it.
 
 | Method and path                                      | Scopes                         | Body                  | Response                                                                                                                                  |
 | ---------------------------------------------------- | ------------------------------ | --------------------- | ----------------------------------------------------------------------------------------------------------------------------------------- |
