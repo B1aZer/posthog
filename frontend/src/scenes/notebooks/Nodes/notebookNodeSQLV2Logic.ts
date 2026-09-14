@@ -676,6 +676,11 @@ export const notebookNodeSQLV2Logic = kea<notebookNodeSQLV2LogicType>([
                 }
                 cache.activeRunId = runId
                 props.updateAttributes({ nodeId: props.nodeId, runId, result: null, runStatus: null })
+                // Both node components draw `pageResult` in preference to the document result, so a
+                // cell the user had paged into would keep showing the previous run's rows. `runQuery`
+                // clears the paging state for a run this cell dispatched; an adopted run needs it too.
+                actions.resetPaging()
+                actions.setDirectRows(null)
                 actions.startPolling(runId)
             },
             startPolling: ({ runId }) => {

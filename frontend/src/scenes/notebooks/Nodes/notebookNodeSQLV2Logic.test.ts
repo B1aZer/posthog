@@ -580,10 +580,18 @@ describe('notebookNodeSQLV2Logic', () => {
         await expectLogic(other).toFinishAllListeners()
         expect(runSpy).toHaveBeenCalledTimes(2)
     })
-    it('adopts a run the backend started for this cell and polls it', async () => {
+    it('adopts a run the backend started for this cell, clears the old page, and polls it', async () => {
         mount()
+        // A cell the user had paged into holds rows the components draw in preference to the
+        // document result, so an adopt that left them would show the previous run as current.
+        logic.actions.setPageResult({ columns: ['a'], types: [['a', 'Int64']], rows: [[1]], has_more: false })
+        logic.actions.setDirectRows({ columns: ['a'], types: [['a', 'Int64']], rows: [[1]] })
+
         logic.actions.adoptChainRun('n1', 'chain-run')
         await expectLogic(logic).toDispatchActions(['startPolling', 'pollResult'])
+
+        expect(logic.values.pageResult).toBeNull()
+        expect(logic.values.directRows).toBeNull()
 
         // Pinning nodeId keeps the cell's identity: markdown cell ids are content
         // fingerprints, so a later prop change would otherwise orphan this run.
