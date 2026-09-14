@@ -918,7 +918,7 @@ class TestCalculateActivity(BaseTest):
             _calculate(exp.id, "m1", str(recalc.id), _QUERY_TO)
 
         row = ExperimentMetricResult.objects.get(experiment=exp, metric_uuid="m1")
-        assert row.query_id == f"experiment_metric_recalc_{recalc.id}_m1"
+        assert row.query_id == f"experiment_metric_recalc_{recalc.id}_m1_attempt01"
 
     def test_multiple_failures_accumulate_in_metric_errors(self):
         # Two metrics fail in sequence (not in parallel — that would need threads + a real Postgres). Pins the
@@ -1263,21 +1263,29 @@ class TestCalculateActivityCancellation:
     # The calc body runs through sync_to_async, which cannot stop its worker thread once it has started. A
     # plain `await` returns the moment Temporal cancels the activity and leaves the ClickHouse query, its DB
     # connection and the runner's result buffers alive and unsupervised.
-    async def test_cancellation_drains_the_body_before_propagating(self):
+    async def _cancel_during_body(self) -> dict:
+        """Run the activity, cancel it while the body is still going, and report what the activity did."""
         started = asyncio.Event()
-        body_finished = False
+        observed: dict = {"body_finished": False, "cancel_args": None, "cancelled_before_body_finished": None}
 
         async def _slow_body(*args, **kwargs):
-            nonlocal body_finished
             started.set()
             await asyncio.sleep(0.05)
-            body_finished = True
+            observed["body_finished"] = True
             return MetricRecalculationResult(metric_uuid="m1", success=True)
+
+        async def _fake_cancel_query(recalculation_id: str, metric_uuid: str, attempt: int) -> None:
+            observed["cancel_args"] = (recalculation_id, metric_uuid, attempt)
+            observed["cancelled_before_body_finished"] = not observed["body_finished"]
 
         with (
             patch(
                 "products.experiments.backend.temporal.recalculation_activities._calculate_experiment_metric_for_recalculation_sync",
                 _slow_body,
+            ),
+            patch(
+                "products.experiments.backend.temporal.recalculation_activities._cancel_metric_query_sync",
+                _fake_cancel_query,
             ),
             patch("temporalio.activity.info", return_value=SimpleNamespace(attempt=1)),
         ):
@@ -1290,7 +1298,20 @@ class TestCalculateActivityCancellation:
             with pytest.raises(asyncio.CancelledError):
                 await task
 
-        assert body_finished is True
+        return observed
+
+    async def test_cancellation_drains_the_body_before_propagating(self):
+        observed = await self._cancel_during_body()
+
+        assert observed["body_finished"] is True
+
+    async def test_cancellation_kills_the_running_clickhouse_query_first(self):
+        # Without the kill the drain above waits out the query's full max_execution_time, and ClickHouse keeps
+        # reading for an attempt whose result nothing will use.
+        observed = await self._cancel_during_body()
+
+        assert observed["cancel_args"] == ("r1", "m1", 1)
+        assert observed["cancelled_before_body_finished"] is True
 
 
 @contextmanager

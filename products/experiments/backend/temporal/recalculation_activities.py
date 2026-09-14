@@ -19,6 +19,7 @@ from products.experiments.backend.temporal.models import (
 )
 from products.experiments.backend.temporal.recalculation_logic import (
     _calculate_experiment_metric_for_recalculation_sync,
+    _cancel_metric_query_sync,
     _discover_experiment_metrics_sync,
     _update_recalculation_progress_sync,
 )
@@ -75,6 +76,19 @@ async def calculate_experiment_metric_for_recalculation(
         # connection and the runner's result buffers alive and unsupervised, so the worker keeps paying for
         # an attempt Temporal has already given up on. Wait the thread out first, bounded by the activity's
         # own per-attempt budget because the body cannot outlive that by design.
+        if not task.done():
+            # Kill the query before the wait. The thread is blocked on it, so this is what makes the wait
+            # short instead of the query's full max_execution_time, and it stops ClickHouse reading for an
+            # attempt whose result nothing will use.
+            try:
+                await _cancel_metric_query_sync(recalculation_id, metric_uuid, attempt)
+            except Exception:
+                logger.warning(
+                    "experiment_metric_recalculation_query_cancel_failed",
+                    metric_uuid=metric_uuid,
+                    recalculation_id=recalculation_id,
+                    exc_info=True,
+                )
         try:
             await asyncio.wait_for(asyncio.shield(task), timeout=METRIC_CALC_ACTIVITY_TIMEOUT_SECONDS)
         except Exception:
