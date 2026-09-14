@@ -140,6 +140,7 @@ It fires on three shapes.
 `hmac.compare_digest` in a module that also reads a known signature header.
 `hmac` inside a function named like a signature verifier, in the verb form (`verify_signature`) or the predicate form (`signature_ok`, `_is_valid_signature`).
 A vendor SDK call that verifies an inbound signature, such as `stripe.WebhookSignature.verify_header()`, because that shape carries no `hmac` for the first two to find.
+The known header names are spelled out rather than matched generically, so a new provider adds its signature header to the `$HEADER` regex and a fixture case: a generic header pattern makes semgrep time out on a large module, which drops that file from the scan without failing it.
 `posthog/ingress/` is excluded because it is the sanctioned implementation.
 `posthog/auth.py` sits in the ratchet below instead, until the DRF base class moves onto the ingress schemes.
 Tests are excluded because a test builds a signature to send rather than verifying an inbound one.
