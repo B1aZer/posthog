@@ -83,6 +83,22 @@ class TestNotebookRunEndpoints(APIBaseTest):
         with team_scope(self.team.id):
             assert not NotebookRun.objects.filter(notebook=notebook).exists()
 
+    @parameterized.expand(
+        [
+            ("with_variables", {"variables": [{"name": "country", "type": "string", "value": "US"}]}),
+            ("without_variables", {}),
+        ]
+    )
+    def test_a_run_of_the_scratchpad_is_refused(self, mock_start, _flag, _name, body) -> None:
+        # The server stores no scratchpad, so the run has no document to plan and no row to
+        # save variables against.
+        response = self.client.post(
+            f"/api/projects/{self.team.id}/notebooks/scratchpad/runs/", data=body, format="json"
+        )
+
+        assert response.status_code == 400, response.json()
+        mock_start.assert_not_called()
+
     def test_a_second_run_while_one_is_active_is_refused(self, _start, _flag) -> None:
         assert self.client.post(self.runs_url, data={}, format="json").status_code == 200
 

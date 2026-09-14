@@ -674,8 +674,12 @@ class NotebookViewSet(TeamAndOrgViewSetMixin, AccessControlViewSetMixin, ForbidD
     def get_serializer_class(self) -> type[BaseSerializer]:
         return NotebookMinimalSerializer if self.action == "list" else NotebookSerializer
 
+    def _is_scratchpad(self) -> bool:
+        """Whether this request addresses the scratchpad, which the server never stores."""
+        return self.kwargs.get(self.lookup_field) == "scratchpad"
+
     def _get_notebook_for_kernel(self) -> Notebook:
-        if self.kwargs.get(self.lookup_field) == "scratchpad":
+        if self._is_scratchpad():
             notebook = Notebook(
                 short_id="scratchpad",
                 team=self.team,
@@ -1644,6 +1648,19 @@ class NotebookViewSet(TeamAndOrgViewSetMixin, AccessControlViewSetMixin, ForbidD
         serializer.is_valid(raise_exception=True)
         notebook = self._get_notebook_for_kernel()
         self._require_query_access()
+        # The single-cell endpoints run the scratchpad from the code the caller sends, but a
+        # whole-notebook run reads the document and saves the variables, and neither exists
+        # server-side. Refuse here: past this point the variable save has no row to lock.
+        if self._is_scratchpad():
+            return Response(
+                {
+                    "detail": (
+                        "The scratchpad is only saved in the browser, so there is nothing on the server to run. "
+                        "Save it as a notebook first, then run that."
+                    )
+                },
+                status=400,
+            )
 
         try:
             # One transaction, because a refused run must not leave the variables changed.
