@@ -5,6 +5,7 @@ import { ApiConfig } from 'lib/api'
 import { FEATURE_FLAGS } from 'lib/constants'
 import { lemonToast } from 'lib/lemon-ui/LemonToast/LemonToast'
 import { FeatureFlagsSet, featureFlagLogic } from 'lib/logic/featureFlagLogic'
+import { withTimeout } from 'lib/utils/async'
 
 import {
     notebooksRunsCreate,
@@ -24,6 +25,13 @@ const POLL_INTERVAL_MS = 2000
 
 /** Consecutive failed status reads before the run is treated as lost, about ten seconds. */
 const MAX_POLL_FAILURES = 5
+
+/** Deadline for one status read. `fetch` has none, and a read that never settles would hold the
+ * in-flight guard forever, so the failure counter above could never advance. */
+export const STATUS_TIMEOUT_MS = 10000
+
+/** What the user reads once the status endpoint has stopped answering, however it failed. */
+const LOST_RUN_MESSAGE = 'Lost track of the run'
 
 export interface NotebookRunLogicProps {
     shortId: string
@@ -253,7 +261,14 @@ export const notebookRunLogic = kea<notebookRunLogicType>([
                 }
                 cache.pollInFlight = true
                 try {
-                    const run = await notebooksRunsRetrieve(teamId(), props.shortId, values.run?.run_id ?? cache.runId)
+                    const run = await withTimeout(
+                        (signal) =>
+                            notebooksRunsRetrieve(teamId(), props.shortId, values.run?.run_id ?? cache.runId, {
+                                signal,
+                            }),
+                        STATUS_TIMEOUT_MS,
+                        LOST_RUN_MESSAGE
+                    )
                     cache.runId = run.run_id
                     actions.setRun(run)
                     // Hand every newly started cell to the cell that owns it, so its own poll
@@ -276,7 +291,7 @@ export const notebookRunLogic = kea<notebookRunLogicType>([
                     cache.pollFailures = (cache.pollFailures ?? 0) + 1
                     if (cache.pollFailures >= MAX_POLL_FAILURES) {
                         actions.stopPolling()
-                        lemonToast.error(error?.detail || error?.message || 'Lost track of the run')
+                        lemonToast.error(error?.detail || error?.message || LOST_RUN_MESSAGE)
                     }
                 } finally {
                     cache.pollInFlight = false

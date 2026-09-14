@@ -11,7 +11,7 @@ import {
 
 import { notebookNodeStalenessLogic } from './notebookNodeStalenessLogic'
 import { notebookOperationsLogic } from './notebookOperationsLogic'
-import { notebookRunLogic } from './notebookRunLogic'
+import { STATUS_TIMEOUT_MS, notebookRunLogic } from './notebookRunLogic'
 
 jest.mock('products/notebooks/frontend/generated/api', () => ({
     notebooksRunsCreate: jest.fn(),
@@ -79,8 +79,14 @@ describe('notebookRunLogic', () => {
             .toDispatchActions(['pollRun', 'setRun'])
             .toMatchValues({ progressLabel: 'Running cell 1 of 2' })
         // The started run's id is the only thing linking the poll to the run just created;
-        // polling with undefined would 404 and silently abandon it.
-        expect(notebooksRunsRetrieve).toHaveBeenCalledWith(expect.any(String), SHORT_ID, 'nbrun-1')
+        // polling with undefined would 404 and silently abandon it. The signal rides along so the
+        // status deadline can cancel a read instead of leaving it running on the server.
+        expect(notebooksRunsRetrieve).toHaveBeenCalledWith(
+            expect.any(String),
+            SHORT_ID,
+            'nbrun-1',
+            expect.objectContaining({ signal: expect.anything() })
+        )
         await expectLogic(staleness).toDispatchActions([
             staleness.actionCreators.adoptChainRun('s1', 'cell-1'),
             staleness.actionCreators.adoptChainRun('p1', 'cell-2'),
@@ -125,6 +131,34 @@ describe('notebookRunLogic', () => {
 
         expect(logic.values.isRunning).toBe(true)
         expect(operations.values.isBusy).toBe(true)
+
+        jest.mocked(notebooksRunsRetrieve).mockResolvedValueOnce(runStatus('done', [cell('s1', 'done', 'cell-1')]))
+        await expectLogic(logic, () => logic!.actions.pollRun()).toDispatchActions(['runFinished'])
+        expect(operations.values.isBusy).toBe(false)
+
+        operations.unmount()
+    })
+
+    it('does not wedge the poller when a status read never settles', async () => {
+        // `fetch` carries no deadline, and the in-flight guard drops every later tick, so without
+        // one the notebook stays busy and the run cannot be stopped until a page reload.
+        jest.mocked(notebooksRunsRetrieve).mockResolvedValueOnce(
+            runStatus('running', [cell('s1', 'running', 'cell-1')])
+        )
+        logic = notebookRunLogic({ shortId: SHORT_ID })
+        logic.mount()
+        const operations = notebookOperationsLogic({ shortId: SHORT_ID })
+        operations.mount()
+        await expectLogic(logic, () => logic!.actions.startRun()).toDispatchActions(['setRun'])
+
+        jest.useFakeTimers()
+        try {
+            jest.mocked(notebooksRunsRetrieve).mockReturnValueOnce(new Promise(() => {}) as any)
+            logic.actions.pollRun()
+            await jest.advanceTimersByTimeAsync(STATUS_TIMEOUT_MS)
+        } finally {
+            jest.useRealTimers()
+        }
 
         jest.mocked(notebooksRunsRetrieve).mockResolvedValueOnce(runStatus('done', [cell('s1', 'done', 'cell-1')]))
         await expectLogic(logic, () => logic!.actions.pollRun()).toDispatchActions(['runFinished'])
