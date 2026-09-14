@@ -631,7 +631,8 @@ describe('notebook cell tools', () => {
     const notebookRunStatus = (
         status: string,
         cells: any[],
-        failed_node_id: string | null = null
+        failed_node_id: string | null = null,
+        error: string | null = null
     ): Record<string, unknown> => ({
         run_id: 'nbrun-1',
         status,
@@ -641,7 +642,7 @@ describe('notebook cell tools', () => {
         current_index: 0,
         current_node_id: null,
         failed_node_id,
-        error: null,
+        error,
         cells,
         created_at: '2026-01-01T00:00:00Z',
         finished_at: null,
@@ -724,13 +725,14 @@ describe('notebook cell tools', () => {
         })
     })
 
-    it('run notebook reports the cell that stopped the run', async () => {
+    it('run notebook reports the cell that stopped the run and why the run stopped', async () => {
         const state = makeState(RUN_MARKDOWN)
         state.notebookRunStatuses.push(
             notebookRunStatus(
                 'failed',
                 [runCell('first', 'df', 'failed', 'cell-1'), runCell('second', 'out', null, null)],
-                'first'
+                'first',
+                'A cell stopped, so the run stopped.'
             )
         )
         state.runStatusResponses.push({ status: 'failed', result: null, error: 'Unknown table' })
@@ -738,7 +740,14 @@ describe('notebook cell tools', () => {
 
         const result: any = await runNotebookHandler(context, { notebook_id: 'aBcD1234', wait: true })
 
-        expect(result).toMatchObject({ status: 'failed', failed_cell: 'first', completed_count: 0 })
+        // A timeout or a failed dispatch writes only the run-level error, so dropping it
+        // leaves the agent with 'failed' and no reason at all.
+        expect(result).toMatchObject({
+            status: 'failed',
+            failed_cell: 'first',
+            error: 'A cell stopped, so the run stopped.',
+            completed_count: 0,
+        })
         expect(result.cells[1].status).toBeNull()
     })
 

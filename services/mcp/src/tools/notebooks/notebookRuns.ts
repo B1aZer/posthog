@@ -26,6 +26,8 @@ export interface NotebookRunOutcome {
     cell_count: number
     completed_count: number
     failed_cell?: string
+    /** Why the run stopped, when the run itself failed rather than one of its cells. */
+    error?: string
     cells: NotebookRunCellOutcome[]
     starts_sandbox?: boolean
     sandbox_hourly_price?: number | null
@@ -181,6 +183,7 @@ function buildOutcome(
         cell_count: status.cell_count,
         completed_count: cells.filter((cell) => cell.status === 'done').length,
         ...(status.failed_node_id ? { failed_cell: status.failed_node_id } : {}),
+        ...(status.error ? { error: status.error } : {}),
         cells,
     }
 }
