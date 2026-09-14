@@ -1060,7 +1060,7 @@ export interface sessionRecordingPlayerLogicActions {
 export interface sessionRecordingPlayerLogicMeta {
     key: string
     __keaTypeGenInternalSelectorTypes: {
-        playerFrameDocumentFailed: (playerFrameLoadFailures: any) => boolean
+        playerFrameDocumentFailed: (playerFrameLoadFailures: number) => boolean
         sessionRecordingId: (sessionRecordingId: string) => string
         logicProps: (arg: any) => SessionRecordingPlayerLogicProps
         playNextRecording: (arg: any) => ((automatic: boolean) => void) | undefined
@@ -1087,7 +1087,8 @@ export interface sessionRecordingPlayerLogicMeta {
             isSkippingInactivity: boolean,
             isSkippingToMatchingEvent: boolean,
             snapshotsLoaded: boolean,
-            snapshotsLoading: boolean
+            snapshotsLoading: boolean,
+            playerFrameDocumentFailed: boolean
         ) =>
             | SessionPlayerState.READY
             | SessionPlayerState.BUFFER
@@ -1693,6 +1694,7 @@ export const sessionRecordingPlayerLogic = kea<sessionRecordingPlayerLogicType>(
                 s.isSkippingToMatchingEvent,
                 s.snapshotsLoaded,
                 s.snapshotsLoading,
+                s.playerFrameDocumentFailed,
             ],
             (
                 playingState: SessionPlayerState.PLAY | SessionPlayerState.PAUSE,
@@ -1702,9 +1704,13 @@ export const sessionRecordingPlayerLogic = kea<sessionRecordingPlayerLogicType>(
                 isSkippingInactivity: boolean,
                 isSkippingToMatchingEvent: boolean,
                 snapshotsLoaded: boolean,
-                snapshotsLoading: boolean
+                snapshotsLoading: boolean,
+                playerFrameDocumentFailed: boolean
             ) => {
                 switch (true) {
+                    // The frame failure stays out of playerError, because playback clears that whenever it buffers.
+                    case playerFrameDocumentFailed:
+                        return SessionPlayerState.ERROR
                     case isScrubbing:
                         // If scrubbing, playingState takes precedence
                         return playingState
@@ -2306,7 +2312,6 @@ export const sessionRecordingPlayerLogic = kea<sessionRecordingPlayerLogicType>(
                 ...getPlayerFrameLoadDiagnostics(iframe),
             }
             if (values.playerFrameDocumentFailed) {
-                // The app-document fallback hides the failure from the viewer, so the only sign of it is the report.
                 posthog.captureException(new Error('Replay player frame loaded without its mount node'), {
                     feature: 'session-recording-player-frame',
                     ...report,
