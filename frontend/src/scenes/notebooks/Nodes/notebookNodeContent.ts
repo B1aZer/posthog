@@ -427,6 +427,41 @@ export const collectPythonKernelNodes = (content?: JSONContent | null): PythonKe
     return nodes
 }
 
+/**
+ * Whether a whole-notebook run would execute anything: at least one SQL or Python cell that
+ * holds code. This mirrors the backend's own plan filter, which keeps every SQL and Python
+ * cell with non-blank code, so a control gated on this offers a run that the backend accepts.
+ */
+export const hasRunnableV2Nodes = (content?: JSONContent | null): boolean => {
+    if (!content || typeof content !== 'object') {
+        return false
+    }
+
+    let found = false
+
+    const walk = (node: any): void => {
+        if (found || !node || typeof node !== 'object') {
+            return
+        }
+        if (node.type === NotebookNodeType.SQLV2 || node.type === NotebookNodeType.PythonV2) {
+            const code = node.attrs?.code
+            if (typeof code === 'string' && code.trim()) {
+                found = true
+                return
+            }
+        }
+        if (node.type === NotebookNodeType.MarkdownNotebook) {
+            expandMarkdownNotebookNodesOfTypes(node, [NotebookNodeType.SQLV2, NotebookNodeType.PythonV2]).forEach(walk)
+        }
+        if (Array.isArray(node.content)) {
+            node.content.forEach(walk)
+        }
+    }
+
+    walk(content)
+    return found
+}
+
 const buildDependencyUsage = (node: NotebookDependencyNode): NotebookDependencyUsage => {
     return {
         nodeId: node.nodeId,

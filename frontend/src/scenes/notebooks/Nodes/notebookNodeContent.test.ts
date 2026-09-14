@@ -6,6 +6,7 @@ import {
     buildNotebookDependencyGraph,
     collectNotebookFrameNodes,
     extractPythonIdentifiers,
+    hasRunnableV2Nodes,
 } from './notebookNodeContent'
 
 describe('buildNotebookDependencyGraph', () => {
@@ -128,6 +129,27 @@ describe('buildNotebookDependencyGraph', () => {
         ].join('\n\n')
         const graph = buildNotebookDependencyGraph(buildMarkdownNotebookContent(markdown))
         expect(graph.downstreamUsageByNode['a'].sql_df.map((usage) => usage.nodeId)).toEqual(['py'])
+    })
+
+    // The Run all button is gated on this, and the backend plans a run from every SQL and Python
+    // cell that holds code. A gate that reads only SQL cells hides the button on a Python
+    // notebook; one that ignores blank code offers a run the backend refuses to start.
+    it.each([
+        ['a SQL cell with code is runnable', [['SQLV2', 'select id from events']], true],
+        ['a Python cell with code is runnable', [['PythonV2', 'df = events.head()']], true],
+        [
+            'cells whose code is blank are not runnable',
+            [
+                ['SQLV2', '   '],
+                ['PythonV2', ''],
+            ],
+            false,
+        ],
+    ])('%s', (_title, cells, expected) => {
+        const markdown = (cells as string[][])
+            .map(([tagName, code], index) => serializeMarkdownNotebookComponent(tagName, { nodeId: `n${index}`, code }))
+            .join('\n\n')
+        expect(hasRunnableV2Nodes(buildMarkdownNotebookContent(markdown))).toBe(expected)
     })
 
     it('extractPythonIdentifiers ignores strings, comments, and attribute tails', () => {

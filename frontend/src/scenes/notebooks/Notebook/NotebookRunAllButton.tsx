@@ -5,6 +5,7 @@ import { LemonButton, LemonButtonProps } from '@posthog/lemon-ui'
 
 import { featureFlagLogic } from 'lib/logic/featureFlagLogic'
 
+import { hasRunnableV2Nodes } from '../Nodes/notebookNodeContent'
 import { isKernelUiEnabled } from '../utils'
 import { isMarkdownNotebookContent } from './markdownNotebookV2'
 import { notebookLogic } from './notebookLogic'
@@ -18,12 +19,12 @@ export const NotebookRunAllButton = (
     props: Pick<LemonButtonProps, 'children' | 'size' | 'type'>
 ): JSX.Element | null => {
     const { featureFlags } = useValues(featureFlagLogic)
-    const { content, shortId, isShared, sqlV2NodeSummaries } = useValues(notebookLogic)
+    const { content, shortId, isShared } = useValues(notebookLogic)
     const { isRunning, isStarting, isInterrupting, progressLabel } = useValues(notebookRunLogic({ shortId }))
     const { startRun, interruptRun } = useActions(notebookRunLogic({ shortId }))
 
     // Only a markdown notebook with something to run gets the button at all.
-    if (!isKernelUiEnabled(featureFlags) || !isMarkdownNotebookContent(content) || !sqlV2NodeSummaries.length) {
+    if (!isKernelUiEnabled(featureFlags) || !isMarkdownNotebookContent(content) || !hasRunnableV2Nodes(content)) {
         return null
     }
 
