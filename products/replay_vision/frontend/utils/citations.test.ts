@@ -12,10 +12,10 @@ describe('parseCitedSegments', () => {
             expected: [text('changed the filter'), chip(1437), chip(1441), text(', scrolling'), chip(1479)],
         },
         {
-            name: 'seeks a range to its start only, the one moment it cites',
+            name: 'seeks a range to its start only, and keeps a moment listed after it',
             text: '',
-            segments: [text('Hovered the plan table (t 34-42) without clicking')],
-            expected: [text('Hovered the plan table'), chip(34), text(' without clicking')],
+            segments: [text('Hovered the plan table (t 34-42, 50) without clicking')],
+            expected: [text('Hovered the plan table'), chip(34), chip(50), text(' without clicking')],
         },
         {
             name: 'handles the comma-joined variant that repeats the t prefix',

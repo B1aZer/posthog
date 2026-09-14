@@ -18,7 +18,7 @@ import { ObservationResultSummary, ObservationStatusTag } from '../../components
 import { ObservationRetryButton } from '../../components/ObservationRetryButton'
 import type { ReplayObservationApi } from '../../generated/api.schemas'
 import { observationDetailUrl } from '../../observations/replayObservationLogic'
-import { similarSearchUrl } from '../../search/observationQueries'
+import { markSimilarSearchIntent, similarSearchUrl } from '../../search/observationQueries'
 import { ObservationSearch } from '../../search/ObservationSearch'
 import {
     OBSERVATIONS_PAGE_SIZE,
@@ -253,6 +253,7 @@ export function ScannerObservationsTable({ scannerId }: { scannerId: string }): 
                             type="secondary"
                             icon={<IconSearch />}
                             to={similarUrl ?? undefined}
+                            onClick={() => markSimilarSearchIntent(obs)}
                             disabledReason={similarUrl ? undefined : 'This observation has no text to search with'}
                             tooltip="Find similar observations across scanners"
                             // A `to` renders a Link, which skips LemonButton's tooltip-to-aria-label fallback.

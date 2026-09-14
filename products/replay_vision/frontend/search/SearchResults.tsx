@@ -14,6 +14,7 @@ import { ObservationResultSummary } from '../components/ObservationCard'
 import { ScannerOutputBadge } from '../components/ScannerOutputBadge'
 import type { ObservationSearchResultApi, ReplayObservationApi } from '../generated/api.schemas'
 import { observationDetailUrl } from '../observations/replayObservationLogic'
+import { ReplayScannerTab } from '../replay_scanners/replayScannerSceneLogic'
 import { stripCitations } from '../utils/citations'
 import { hasScannerPage, scannerLabel } from '../utils/observation'
 import { firstCitedTimestampMs, watchMomentUrl } from './observationQueries'
@@ -49,15 +50,16 @@ function SubjectLabel({ observation }: { observation: ReplayObservationApi }): J
 function SearchResultCard({
     result,
     searchedQuery,
-    showScanner,
+    crossScanner,
 }: {
     result: ObservationSearchResultApi
     searchedQuery: string
-    showScanner: boolean
+    crossScanner: boolean
 }): JSX.Element {
     const observation = result.observation
     const snapshot = observation.scanner_snapshot
-    const detailUrl = observationDetailUrl(observation.id, {})
+    // Back from the detail page returns to the tab this card sits on. The hub has no scanner tab to return to.
+    const detailUrl = observationDetailUrl(observation.id, crossScanner ? {} : { tab: ReplayScannerTab.Observations })
     const citedMs = firstCitedTimestampMs(observation)
     // The stored prose keeps its `(t 12)` markers, and the snippet has no seek controls to spend them on.
     const snippet = stripCitations(result.matched_content)
@@ -67,7 +69,7 @@ function SearchResultCard({
             data-attr="vision-search-result"
         >
             <div className="flex items-center gap-2 min-w-0">
-                {showScanner && (
+                {crossScanner && (
                     <>
                         {hasScannerPage(observation) ? (
                             <Link
@@ -96,7 +98,7 @@ function SearchResultCard({
                                 {segment.text}
                             </span>
                         ) : (
-                            <Fragment key={index}>{segment.text}</Fragment>
+                            <span key={index}>{segment.text}</span>
                         )
                     )}
                 </div>
@@ -176,7 +178,7 @@ export function SearchResults({
                             <SearchResultCard
                                 result={result}
                                 searchedQuery={searchedQuery ?? ''}
-                                showScanner={crossScanner}
+                                crossScanner={crossScanner}
                             />
                         </Fragment>
                     )

@@ -1,5 +1,6 @@
 import clsx from 'clsx'
 import { useActions, useValues } from 'kea'
+import { combineUrl } from 'kea-router'
 
 import { IconPlusSmall, IconSearch, IconX } from '@posthog/icons'
 import { LemonButton, Link, Spinner } from '@posthog/lemon-ui'
@@ -67,11 +68,14 @@ function SearchPrompt({
                 value={query}
                 onChange={(event) => onChange(event.target.value)}
                 onKeyDown={(event) => {
-                    if (event.key === 'Enter' && canSubmit) {
+                    // Enter also commits an IME candidate; searching then would send the uncommitted text.
+                    if (event.key === 'Enter' && !event.nativeEvent.isComposing && canSubmit) {
                         onSubmit()
                     }
                 }}
                 placeholder="Describe what to look for"
+                // The label shell holds two buttons, whose tooltips would otherwise become the field's name.
+                aria-label="Search observations"
                 disabled={!dataProcessingAccepted}
                 autoComplete="off"
                 autoFocus={autoFocus}
@@ -249,7 +253,12 @@ export function ObservationSearch({
                                 type="secondary"
                                 size="small"
                                 icon={<IconPlusSmall />}
-                                to={urls.replayVisionTemplates()}
+                                to={
+                                    combineUrl(
+                                        urls.replayVisionTemplates(),
+                                        searchedQuery ? { goal: searchedQuery } : {}
+                                    ).url
+                                }
                                 data-attr="vision-search-create-scanner"
                             >
                                 Create a scanner for this

@@ -1,5 +1,11 @@
 import type { ReplayObservationApi } from '../generated/api.schemas'
-import { similarSearchQuery, similarSearchUrl, watchMomentUrl } from './observationQueries'
+import {
+    consumeSimilarSearchIntent,
+    markSimilarSearchIntent,
+    similarSearchQuery,
+    similarSearchUrl,
+    watchMomentUrl,
+} from './observationQueries'
 
 function observation(modelOutput: Record<string, unknown> | null): ReplayObservationApi {
     return {
@@ -33,6 +39,12 @@ describe('observationQueries', () => {
             'User rage clicked the button',
         ],
         ['falls back to the reasoning', { reasoning: 'Hesitated on pricing' }, 'Hesitated on pricing'],
+        [
+            'leads with the title, as the summarizer indexes it',
+            { title: 'Stalled', summary: 'Paused' },
+            'Stalled Paused',
+        ],
+        ['searches with a title alone', { title: 'Stalled', summary: '' }, 'Stalled'],
         ['gives null when there is no prose', { summary: '   ' }, null],
     ])('%s', (_name, modelOutput, expected) => {
         expect(similarSearchQuery(observation(modelOutput))).toBe(expected)
@@ -44,10 +56,17 @@ describe('observationQueries', () => {
         expect(query!.endsWith('word')).toBe(true)
     })
 
-    it('builds a cross-scanner search link carrying the query', () => {
-        expect(similarSearchUrl(observation({ summary: 'stuck at checkout' }))).toBe(
-            '/replay-vision?tab=search&q=stuck%20at%20checkout'
-        )
+    it('never ends on half a surrogate pair when cutting spaceless prose', () => {
+        expect(similarSearchQuery(observation({ summary: `${'観'.repeat(299)}😀` }))).toBe('観'.repeat(299))
+    })
+
+    it('links to the search tab without the prose, which travels through the one-shot hand-off', () => {
+        const source = observation({ summary: 'stuck at checkout' })
+        expect(similarSearchUrl(source)).toBe('/replay-vision?tab=search')
         expect(similarSearchUrl(observation(null))).toBeNull()
+
+        markSimilarSearchIntent(source)
+        expect(consumeSimilarSearchIntent()).toEqual({ query: 'stuck at checkout', sourceObservationId: 'obs-1' })
+        expect(consumeSimilarSearchIntent()).toBeNull()
     })
 })

@@ -25,6 +25,7 @@ import {
 } from '../generated/api'
 import type { ObservationSearchResultApi } from '../generated/api.schemas'
 import { ReplayScannerTab } from '../replay_scanners/replayScannerSceneLogic'
+import { consumeSimilarSearchIntent } from './observationQueries'
 
 // The server's MAX_SEARCH_LIMIT. A larger value would 400.
 const SEARCH_RESULT_LIMIT = 50
@@ -60,6 +61,7 @@ export interface observationSearchLogicValues {
     results: ObservationSearchResultApi[] | null
     searchedQuery: string | null
     searching: boolean
+    sourceObservationId: string | null
     suggestedQueries: string[]
     suggestedQueriesLoading: boolean
     topMatchDistanceCutoff: number | null
@@ -92,12 +94,21 @@ export interface observationSearchLogicActions {
     searchFailure: () => {
         value: true
     }
+    searchSimilar: (
+        query: string,
+        sourceObservationId: string
+    ) => {
+        query: string
+        sourceObservationId: string
+    }
     searchSuccess: (
         results: ObservationSearchResultApi[],
         query: string,
-        truncated: boolean
+        truncated: boolean,
+        remember?: boolean
     ) => {
         query: string
+        remember: boolean
         results: ObservationSearchResultApi[]
         truncated: boolean
     }
@@ -137,10 +148,18 @@ export const observationSearchLogic = kea<observationSearchLogicType>([
         setQuery: (query: string) => ({ query }),
         setPage: (page: number) => ({ page }),
         search: true,
-        searchSuccess: (results: ObservationSearchResultApi[], query: string, truncated: boolean) => ({
+        // The "find similar" entry: the query is observation prose, and the source is dropped from the results.
+        searchSimilar: (query: string, sourceObservationId: string) => ({ query, sourceObservationId }),
+        searchSuccess: (
+            results: ObservationSearchResultApi[],
+            query: string,
+            truncated: boolean,
+            remember: boolean = true
+        ) => ({
             results,
             query,
             truncated,
+            remember,
         }),
         searchFailure: true,
         clearSearch: true,
@@ -151,7 +170,17 @@ export const observationSearchLogic = kea<observationSearchLogicType>([
             '' as string,
             {
                 setQuery: (_, { query }) => query,
+                searchSimilar: (_, { query }) => query,
                 clearSearch: () => '',
+            },
+        ],
+        // Set until the person types or clears, so an edited "find similar" query is an ordinary search again.
+        sourceObservationId: [
+            null as string | null,
+            {
+                searchSimilar: (_, { sourceObservationId }) => sourceObservationId,
+                setQuery: () => null,
+                clearSearch: () => null,
             },
         ],
         // null until the first search, so the empty state can tell "not searched yet" from "no matches".
@@ -168,6 +197,7 @@ export const observationSearchLogic = kea<observationSearchLogicType>([
                 search: () => true,
                 searchSuccess: () => false,
                 searchFailure: () => false,
+                clearSearch: () => false,
             },
         ],
         searchedQuery: [
@@ -182,8 +212,8 @@ export const observationSearchLogic = kea<observationSearchLogicType>([
             [] as string[],
             { persist: true },
             {
-                searchSuccess: (state, { query, results }) =>
-                    results.length > 0
+                searchSuccess: (state, { query, results, remember }) =>
+                    remember && results.length > 0
                         ? [query, ...state.filter((recent) => recent !== query)].slice(0, RECENT_QUERIES_LIMIT)
                         : state,
             },
@@ -268,6 +298,7 @@ export const observationSearchLogic = kea<observationSearchLogicType>([
                 actions.clearSearch()
             }
         },
+        searchSimilar: () => actions.search(),
         search: async (_, breakpoint) => {
             const query = values.query.trim()
             if (!query) {
@@ -279,6 +310,7 @@ export const observationSearchLogic = kea<observationSearchLogicType>([
                 actions.searchFailure()
                 return
             }
+            const sourceObservationId = values.sourceObservationId
             try {
                 const response = await visionObservationsSearchRetrieve(String(teamId), {
                     q: query,
@@ -287,7 +319,13 @@ export const observationSearchLogic = kea<observationSearchLogicType>([
                 })
                 // Drop out-of-order responses. The newest search owns the results.
                 breakpoint()
-                actions.searchSuccess(response.results ?? [], query, response.truncated ?? false)
+                // A clear while the request ran already emptied the card, and a late response must not refill it.
+                if (!values.searching) {
+                    return
+                }
+                const results = (response.results ?? []).filter((r) => r.observation.id !== sourceObservationId)
+                // Observation prose stays out of the persisted recent searches, like it stays out of the URL.
+                actions.searchSuccess(results, query, response.truncated ?? false, sourceObservationId === null)
             } catch (error: any) {
                 if (error instanceof Error && isBreakpoint(error)) {
                     throw error
@@ -322,7 +360,8 @@ export const observationSearchLogic = kea<observationSearchLogicType>([
                 router.values.location.pathname,
                 {
                     ...router.values.searchParams,
-                    q: values.query.trim() || undefined,
+                    // A "find similar" query is recording prose, which stays out of the URL (see markSimilarSearchIntent).
+                    q: values.sourceObservationId ? undefined : values.query.trim() || undefined,
                 },
                 router.values.hashParams,
                 { replace: true },
@@ -345,6 +384,11 @@ export const observationSearchLogic = kea<observationSearchLogicType>([
                 if (searchParams.tab !== ReplayScannerTab.Search) {
                     return
                 }
+                const intent = consumeSimilarSearchIntent()
+                if (intent) {
+                    actions.searchSimilar(intent.query, intent.sourceObservationId)
+                    return
+                }
                 // kea-router decodes ?q=true to a boolean, so stringify instead of dropping it.
                 const raw = searchParams.q
                 const q = typeof raw === 'string' ? raw : raw != null ? String(raw) : ''
@@ -354,8 +398,9 @@ export const observationSearchLogic = kea<observationSearchLogicType>([
                 if (q && q !== values.searchedQuery && q !== values.query.trim()) {
                     actions.setQuery(q)
                     actions.search()
-                } else if (!q && values.searchedQuery !== null) {
+                } else if (!q && values.searchedQuery !== null && values.sourceObservationId === null) {
                     // The URL lost its query (back navigation, or a tab switch dropped it), so show the empty state.
+                    // A "find similar" search never had one there, so it keeps its results.
                     actions.clearSearch()
                 }
             },

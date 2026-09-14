@@ -7,7 +7,8 @@ import { urls } from 'scenes/urls'
 import { useMocks } from '~/mocks/jest'
 import { initKeaTests } from '~/test/init'
 
-import type { ObservationSearchResultApi } from '../generated/api.schemas'
+import type { ObservationSearchResultApi, ReplayObservationApi } from '../generated/api.schemas'
+import { markSimilarSearchIntent } from './observationQueries'
 import { observationSearchLogic } from './observationSearchLogic'
 
 function searchResults(distances: number[]): ObservationSearchResultApi[] {
@@ -27,6 +28,7 @@ describe('observationSearchLogic', () => {
 
     beforeEach(() => {
         localStorage.clear()
+        sessionStorage.clear()
         searchSpy = jest.fn(() => [200, { results: [{ observation: { id: 'obs-1' }, distance: 0.1 }] }])
         suggestionsSpy = jest.fn(() => [200, { queries: ['coupon rejected at checkout'] }])
         viewedSpy = jest.fn(() => [204, null])
@@ -209,6 +211,55 @@ describe('observationSearchLogic', () => {
         expect(logic.values.results).toBeNull()
         expect(logic.values.searchedQuery).toBeNull()
         expect(router.values.searchParams.q).toBeUndefined()
+        logic.unmount()
+    })
+
+    it('a clear while a search is in flight leaves the empty state when the response lands', async () => {
+        let release!: () => void
+        const gate = new Promise<void>((resolve) => (release = resolve))
+        searchSpy.mockImplementation(async () => {
+            await gate
+            return [200, { results: [{ observation: { id: 'obs-1' }, distance: 0.1 }] }]
+        })
+        const logic = observationSearchLogic({ scannerId: null, teamId: 1, userId: 'user-1' })
+        logic.mount()
+        router.actions.push(urls.replayVision(), { tab: 'search' })
+        logic.actions.setQuery('rage clicks')
+        logic.actions.search()
+        expect(logic.values.searching).toBe(true)
+        logic.actions.clearSearch()
+        expect(logic.values.searching).toBe(false)
+        release()
+        await expectLogic(logic).toFinishAllListeners()
+
+        expect(logic.values.results).toBeNull()
+        expect(logic.values.recentQueries).toEqual([])
+        logic.unmount()
+    })
+
+    it('a "find similar" hand-off searches without the prose in the URL or recents, minus its source', async () => {
+        searchSpy.mockImplementation(() => [
+            200,
+            {
+                results: [
+                    { observation: { id: 'obs-0' }, distance: 0 },
+                    { observation: { id: 'obs-1' }, distance: 0.2 },
+                ],
+            },
+        ])
+        markSimilarSearchIntent({
+            id: 'obs-0',
+            scanner_result: { model_output: { summary: 'Stalled at checkout' } },
+        } as unknown as ReplayObservationApi)
+        const logic = observationSearchLogic({ scannerId: null, teamId: 1, userId: 'user-1' })
+        logic.mount()
+        router.actions.push(urls.replayVision(), { tab: 'search' })
+        await expectLogic(logic).toFinishAllListeners()
+
+        expect(logic.values.query).toBe('Stalled at checkout')
+        expect(logic.values.results?.map((r) => r.observation.id)).toEqual(['obs-1'])
+        expect(router.values.searchParams.q).toBeUndefined()
+        expect(logic.values.recentQueries).toEqual([])
         logic.unmount()
     })
 

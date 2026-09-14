@@ -15,7 +15,7 @@ import {
     parseFailureReason,
     parseIneligibleReason,
 } from '../replay_scanners/types'
-import { similarSearchUrl } from '../search/observationQueries'
+import { markSimilarSearchIntent, similarSearchUrl } from '../search/observationQueries'
 import { citedTextToPlainText, parseCitedSegments } from '../utils/citations'
 import { readReasoning, scannerLabel } from '../utils/observation'
 import { CitedMarkdown } from './CitedMarkdown'
@@ -422,7 +422,8 @@ export function ObservationDockCard({
 
     return (
         <div className="border rounded p-3 bg-surface-primary space-y-2">
-            <div className="flex items-center justify-between gap-2">
+            {/* Wraps, because the player sidebar can be 20rem wide and the action links do not shrink. */}
+            <div className="flex flex-wrap items-center justify-between gap-2">
                 <div className="flex items-center gap-2 min-w-0">
                     {observation.status !== 'succeeded' && (
                         <ObservationStatusTag status={observation.status} errorReason={observation.error_reason} />
@@ -434,7 +435,7 @@ export function ObservationDockCard({
                         </span>
                     )}
                 </div>
-                <div className="flex items-center gap-2 shrink-0">
+                <div className="flex items-center gap-2 shrink-0 ml-auto">
                     {observation.status === 'succeeded' && result && (
                         <ObservationConfidence result={result} standalone />
                     )}
@@ -444,6 +445,7 @@ export function ObservationDockCard({
                     {similarUrl && (
                         <Link
                             to={similarUrl}
+                            onClick={() => markSimilarSearchIntent(observation)}
                             className="text-xs whitespace-nowrap"
                             data-attr="vision-dock-find-similar"
                         >
