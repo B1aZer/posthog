@@ -24,7 +24,13 @@ from posthog.temporal.common.client import sync_connect
 
 from products.notebooks.backend.facade.contracts import NotebookRunBusy, TeamRunCapacityFull
 from products.notebooks.backend.models import NotebookNodeRun, NotebookRun
-from products.notebooks.backend.notebook_run import finish_notebook_run, node_run_request_for, stop_current_cell
+from products.notebooks.backend.notebook_run import (
+    NOTEBOOK_RUN_EXECUTION_TIMEOUT,
+    NOTEBOOK_RUN_TIMEOUT,
+    finish_notebook_run,
+    node_run_request_for,
+    stop_current_cell,
+)
 from products.notebooks.backend.sql_v2_direct import sync_direct_run
 from products.notebooks.backend.sql_v2_dispatch import NodeRunDispatchFailed, NodeRunInvalid, dispatch_node_run
 from products.notebooks.backend.sql_v2_metrics import OUTCOME_TIMED_OUT
@@ -40,10 +46,6 @@ CELL_POLL_INTERVAL_SECONDS = 2
 # the run gives up. A person clicking Run on one cell just as the whole-notebook run reaches
 # that cell is the case worth waiting out.
 DISPATCH_RETRY_BUDGET = timedelta(minutes=2)
-
-# The watchdog for a run that stops making progress. Every cell has its own budget already;
-# this bounds the whole run, so a stuck record cannot stay RUNNING and block the notebook.
-NOTEBOOK_RUN_TIMEOUT = timedelta(hours=1)
 
 _CELL_STOPPED_ERROR = "A cell did not finish, so the run stopped there."
 _RUN_TIMEOUT_ERROR = "The run took longer than an hour, so it stopped."
@@ -349,7 +351,7 @@ def start_notebook_run_workflow(inputs: NotebookRunInput) -> None:
             "notebook-run",
             f"notebook-run-{inputs.notebook_run_id}",
             inputs,
-            execution_timeout=NOTEBOOK_RUN_TIMEOUT + timedelta(minutes=5),
+            execution_timeout=NOTEBOOK_RUN_EXECUTION_TIMEOUT,
         )
     except WorkflowAlreadyStartedError:
         pass

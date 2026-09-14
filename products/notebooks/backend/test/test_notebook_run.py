@@ -109,6 +109,22 @@ class TestNotebookRunEndpoints(APIBaseTest):
 
         assert response.status_code == 409, response.json()
 
+    def test_a_run_left_behind_by_a_dead_workflow_stops_blocking_the_notebook(self, _start, _flag) -> None:
+        # Temporal ends the workflow's execution at the run's timeout plus a margin, and a
+        # terminated execution writes no outcome. Without a reclaim the partial unique
+        # constraint would refuse every later run of this notebook for good.
+        stranded_id = self.client.post(self.runs_url, data={}, format="json").json()["run_id"]
+        with team_scope(self.team.id):
+            NotebookRun.objects.filter(id=stranded_id).update(created_at=now() - timedelta(hours=3))
+
+        response = self.client.post(self.runs_url, data={}, format="json")
+
+        assert response.status_code == 200, response.json()
+        with team_scope(self.team.id):
+            stranded = NotebookRun.objects.get(id=stranded_id)
+        assert stranded.status == NotebookRun.Status.FAILED
+        assert stranded.finished_at is not None
+
     def test_variables_are_saved_before_the_run_snapshots_them(self, _start, _flag) -> None:
         response = self.client.post(
             self.runs_url,

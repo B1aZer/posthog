@@ -11,6 +11,7 @@ the rule the editor's staleness chain already relies on. So the plan needs no so
 """
 
 from collections.abc import Mapping
+from datetime import timedelta
 from typing import Any, TypedDict
 from uuid import UUID
 
@@ -49,6 +50,20 @@ _CELL_NOT_DISPATCHABLE = (
     "A cell in this notebook has an identifier this run cannot use, so nothing was started. "
     "Open the notebook in the editor and save it again, then run it."
 )
+_RUN_ABANDONED = "This run stopped without finishing. Run the notebook again."
+
+# The watchdog for a run that stops making progress. Every cell has its own budget already;
+# this bounds the whole run, so a stuck record cannot stay RUNNING and block the notebook.
+NOTEBOOK_RUN_TIMEOUT = timedelta(hours=1)
+
+# What the workflow's Temporal execution is bounded at. The margin over the watchdog leaves
+# the workflow time to write its own outcome first.
+NOTEBOOK_RUN_EXECUTION_TIMEOUT = NOTEBOOK_RUN_TIMEOUT + timedelta(minutes=5)
+
+# Past this age nothing can finish a run any more: Temporal has ended the execution that owns
+# it, whether that execution timed out, was terminated, or never started. The margin on top
+# keeps a run that is writing its outcome right now well out of reach.
+_RUN_ABANDONED_AFTER = NOTEBOOK_RUN_EXECUTION_TIMEOUT + timedelta(minutes=30)
 
 
 class PlannedCell(TypedDict):
@@ -147,12 +162,35 @@ def start_notebook_run(
         raise NotebookRunNothingToRun(_NOTHING_TO_RUN)
     _assert_plan_is_dispatchable(cell_plan)
 
+    notebook_run = _create_run_record(notebook, user, team, trigger=trigger, cell_plan=cell_plan)
+    if notebook_run is None:
+        # The notebook already has a running row. It may be one nobody can finish any more,
+        # so reclaim that before refusing, rather than leaving the notebook unable to run.
+        if not _reclaim_abandoned_run(team.id, notebook):
+            raise NotebookRunAlreadyRunning(_ALREADY_RUNNING)
+        notebook_run = _create_run_record(notebook, user, team, trigger=trigger, cell_plan=cell_plan)
+        if notebook_run is None:
+            # Another start took the freed slot in the same moment. That one is real.
+            raise NotebookRunAlreadyRunning(_ALREADY_RUNNING)
+
+    return NotebookRunStart(notebook_run=notebook_run, cell_count=len(cell_plan))
+
+
+def _create_run_record(
+    notebook: Notebook,
+    user: User | None,
+    team: Team,
+    *,
+    trigger: str,
+    cell_plan: list[PlannedCell],
+) -> NotebookRun | None:
+    """Write the run row, or return None when the notebook already has a running one."""
     try:
         # The savepoint keeps the IntegrityError from poisoning a caller's transaction: the
         # start endpoint wraps this together with its variable save, so a refused run has to
         # leave that transaction usable enough to roll back cleanly.
         with transaction.atomic():
-            notebook_run = NotebookRun.objects.create(
+            return NotebookRun.objects.create(
                 team_id=team.id,
                 notebook=notebook,
                 user=user,
@@ -160,11 +198,37 @@ def start_notebook_run(
                 variables=notebook.variables or [],
                 cell_plan=cell_plan,
             )
-    except IntegrityError as e:
+    except IntegrityError:
         # The partial unique constraint, not a lock: one running row per notebook.
-        raise NotebookRunAlreadyRunning(_ALREADY_RUNNING) from e
+        return None
 
-    return NotebookRunStart(notebook_run=notebook_run, cell_count=len(cell_plan))
+
+def _reclaim_abandoned_run(team_id: int, notebook: Notebook) -> bool:
+    """Close a run of `notebook` that nothing can finish any more; report whether one went.
+
+    Age is the whole test, and only past the point where Temporal has ended the workflow's
+    execution. A terminated or timed-out execution runs no workflow code, so no handler
+    writes the outcome, and the partial unique constraint then refuses every later run of
+    that notebook. Nobody else reclaims it: recovery needs the run id, which only the
+    original caller ever held.
+
+    The cell the run left behind is not stopped from here. That call reaches the kernel over
+    the network, and this runs inside the starting request's transaction. A cell that old is
+    already handled by the kernel-run expiry and the slot reclaim.
+    """
+    abandoned = (
+        NotebookRun.objects.for_team(team_id)
+        .filter(
+            notebook=notebook,
+            status=NotebookRun.Status.RUNNING,
+            created_at__lt=timezone.now() - _RUN_ABANDONED_AFTER,
+        )
+        .order_by("created_at")
+        .first()
+    )
+    if abandoned is None:
+        return False
+    return finish_notebook_run(abandoned, NotebookRun.Status.FAILED, error=_RUN_ABANDONED, outcome=OUTCOME_TIMED_OUT)
 
 
 def sandbox_disclosure_for_run(
@@ -362,6 +426,8 @@ def active_notebook_run(team_id: int, notebook: Notebook) -> NotebookRun | None:
 
 
 __all__ = [
+    "NOTEBOOK_RUN_EXECUTION_TIMEOUT",
+    "NOTEBOOK_RUN_TIMEOUT",
     "OUTCOME_TIMED_OUT",
     "NotebookRunAlreadyRunning",
     "NotebookRunCellInvalid",
