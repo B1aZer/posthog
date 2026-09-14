@@ -2097,6 +2097,7 @@ export interface SignalReportStateRequestApi {
  * * `work_claim` - Work Claim
  * * `work_release` - Work Release
  * * `pull_request` - Pull Request
+ * * `implementation_decision` - Implementation Decision
  */
 export type SignalReportArtefactArtefactTypeEnumApi =
     (typeof SignalReportArtefactArtefactTypeEnumApi)[keyof typeof SignalReportArtefactArtefactTypeEnumApi]
@@ -2122,6 +2123,7 @@ export const SignalReportArtefactArtefactTypeEnumApi = {
     WorkClaim: 'work_claim',
     WorkRelease: 'work_release',
     PullRequest: 'pull_request',
+    ImplementationDecision: 'implementation_decision',
 } as const
 
 export type SignalReportArtefactApiContent = { [key: string]: unknown } | unknown[]

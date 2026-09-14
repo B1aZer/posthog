@@ -246,6 +246,7 @@ class TestBuildReportPresentationPrompt:
         assert '"comparison"' not in prompt
         assert "Previous period" not in prompt
 
+
 class TestOwnPullRequestCarveOut:
     _PR = "https://github.com/PostHog/posthog/pull/7"
 
