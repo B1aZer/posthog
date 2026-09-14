@@ -1,0 +1,53 @@
+import type { ReplayObservationApi } from '../generated/api.schemas'
+import { similarSearchQuery, similarSearchUrl, watchMomentUrl } from './observationQueries'
+
+function observation(modelOutput: Record<string, unknown> | null): ReplayObservationApi {
+    return {
+        id: 'obs-1',
+        session_id: 'session-1',
+        scanner_result: modelOutput ? { model_output: modelOutput } : null,
+    } as unknown as ReplayObservationApi
+}
+
+describe('observationQueries', () => {
+    it.each([
+        [
+            'a summary citation, ahead of the reasoning',
+            { summary: 'a (t 12)', reasoning: 'c (t 5)' },
+            '/replay/session-1?t=12',
+        ],
+        [
+            'a reasoning citation when the summary has none',
+            { summary: 'plain', reasoning: 'c (t 5)' },
+            '/replay/session-1?t=5',
+        ],
+        ['the recording start when nothing is cited', { summary: 'plain' }, '/replay/session-1'],
+    ])('watches at %s', (_name, modelOutput, expected) => {
+        expect(watchMomentUrl(observation(modelOutput))).toBe(expected)
+    })
+
+    it.each([
+        [
+            'drops citations and collapses the gap',
+            { summary: 'User  rage clicked (t 12) the button' },
+            'User rage clicked the button',
+        ],
+        ['falls back to the reasoning', { reasoning: 'Hesitated on pricing' }, 'Hesitated on pricing'],
+        ['gives null when there is no prose', { summary: '   ' }, null],
+    ])('%s', (_name, modelOutput, expected) => {
+        expect(similarSearchQuery(observation(modelOutput))).toBe(expected)
+    })
+
+    it('cuts a long summary at a word boundary', () => {
+        const query = similarSearchQuery(observation({ summary: `${'word '.repeat(80)}tail` }))
+        expect(query!.length).toBeLessThanOrEqual(300)
+        expect(query!.endsWith('word')).toBe(true)
+    })
+
+    it('builds a cross-scanner search link carrying the query', () => {
+        expect(similarSearchUrl(observation({ summary: 'stuck at checkout' }))).toBe(
+            '/replay-vision?tab=search&q=stuck%20at%20checkout'
+        )
+        expect(similarSearchUrl(observation(null))).toBeNull()
+    })
+})

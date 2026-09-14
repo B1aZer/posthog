@@ -35,7 +35,7 @@ import { ReplayVisionFeedbackButton } from '../components/ReplayVisionFeedbackBu
 import { ScannerTypeBadge } from '../components/ScannerTypeBadge'
 import { replayVisionEmptyState } from '../emptyState/replayVisionEmptyState'
 import { visionQuotaLogic } from '../logics/visionQuotaLogic'
-import { ObservationSearchTab } from '../search/ObservationSearchTab'
+import { ObservationSearch } from '../search/ObservationSearch'
 import { getReplayVisionDeleteDisabledReason, getReplayVisionEditDisabledReason } from '../utils/accessControl'
 import { creditsToUsd, formatCreditCount } from '../utils/credits'
 import { CreateScannerButton } from './components/CreateScannerButton'
@@ -288,7 +288,7 @@ export function ReplayScannersScene(): JSX.Element {
             />
 
             {searchParams.tab === ReplayScannerTab.Search ? (
-                <ObservationSearchTab scanner={null} />
+                <ObservationSearch scannerId={null} scanner={null} className="mt-2 w-4/5 mx-auto" />
             ) : searchParams.tab === 'usage' ? (
                 <VisionUsageTab />
             ) : (

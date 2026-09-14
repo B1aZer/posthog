@@ -58,19 +58,21 @@ describe('observationSearchLogic', () => {
         expect(requestUrl.searchParams.get('q')).toBe('confused users')
         expect(requestUrl.searchParams.get('scanner_id')).toBe(expectedScope)
         expect(logic.values.results?.map((r) => r.observation.id)).toEqual(['obs-1'])
+        // Only the cross-scanner page owns a `q` in the URL; the scanner panel sits on the observations table.
+        expect(router.values.searchParams.q).toEqual(scannerId ? undefined : 'confused users')
         logic.unmount()
     })
 
     it.each([
-        ['spread distances tag the top tier', [0.1, 0.12, 0.4], expect.closeTo(0.15)],
-        ['clustered distances tag nothing', [0.1, 0.12, 0.14], null],
-        ['a single result tags nothing', [0.2], null],
+        ['spread distances split off a top tier', [0.1, 0.12, 0.4], expect.closeTo(0.15)],
+        ['clustered distances stay one tier', [0.1, 0.12, 0.14], null],
+        ['a single result stays one tier', [0.2], null],
     ])('%s', (_name, distances, expectedCutoff) => {
         const logic = observationSearchLogic({ scannerId: null, teamId: 1, userId: 'user-1' })
         logic.mount()
         logic.actions.searchSuccess(searchResults(distances), 'query', false)
 
-        expect(logic.values.strongMatchDistanceCutoff).toEqual(expectedCutoff)
+        expect(logic.values.topMatchDistanceCutoff).toEqual(expectedCutoff)
         logic.unmount()
     })
 
@@ -191,7 +193,7 @@ describe('observationSearchLogic', () => {
             logic.actions.searchSuccess(searchResults([0.2]), query, false)
         }
         logic.actions.searchSuccess([], 'nothing', false)
-        expect(logic.values.recentQueries).toEqual(['two', 'six', 'five', 'four', 'three'])
+        expect(logic.values.recentQueries).toEqual(['two', 'six', 'five', 'four'])
         logic.unmount()
     })
 
