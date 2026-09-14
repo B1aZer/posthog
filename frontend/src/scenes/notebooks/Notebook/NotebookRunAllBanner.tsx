@@ -20,7 +20,9 @@ export const NotebookRunAllBanner = ({ shortId }: { shortId: string }): JSX.Elem
     return (
         <div className="mx-2 mt-1 flex flex-wrap items-center gap-2 rounded border border-accent bg-accent-highlight-secondary p-2 text-xs">
             <Spinner textColored />
-            <span>{progressLabel ?? 'Starting the run'}</span>
+            <span role="status" aria-live="polite" aria-atomic="true">
+                {progressLabel ?? 'Starting the run'}
+            </span>
             <LemonButton
                 type="secondary"
                 size="xsmall"
