@@ -54418,7 +54418,7 @@ export namespace Schemas {
       allowed_cpu_cores: number[];
       /** Memory sizes in GB the kernel config endpoint accepts. */
       allowed_memory_gb: number[];
-      /** Idle timeouts in seconds the kernel config endpoint accepts. */
+      /** Maximum sandbox lifetimes in seconds that the kernel config endpoint accepts. */
       allowed_idle_timeout_seconds: number[];
     }
 
@@ -54427,7 +54427,7 @@ export namespace Schemas {
       cpu_cores?: number;
       /** Memory in GB for the notebook's sandbox kernel; must be a supported option. */
       memory_gb?: number;
-      /** Seconds of inactivity before the sandbox kernel shuts down. */
+      /** Maximum lifetime of the sandbox kernel in seconds. It shuts down this long after it starts, even while in use. A running kernel keeps its current lifetime until it restarts. */
       idle_timeout_seconds?: number;
     }
 
@@ -54443,7 +54443,7 @@ export namespace Schemas {
          */
       memory_gb?: number | null;
       /**
-         * Configured idle timeout in seconds; null means the default.
+         * Configured maximum sandbox lifetime in seconds; null means the default.
          * @nullable
          */
       idle_timeout_seconds?: number | null;
@@ -54474,7 +54474,7 @@ export namespace Schemas {
          */
       memory_gb?: number | null;
       /**
-         * Seconds of inactivity before the sandbox shuts down.
+         * Maximum lifetime of the sandbox in seconds. It shuts down this long after it starts, even while in use.
          * @nullable
          */
       idle_timeout_seconds?: number | null;
@@ -54546,7 +54546,7 @@ export namespace Schemas {
          */
       disk_size_gb?: number | null;
       /**
-         * Seconds of inactivity before the sandbox shuts down.
+         * Maximum lifetime of the sandbox in seconds. It shuts down this long after it starts, even while in use.
          * @nullable
          */
       idle_timeout_seconds?: number | null;
