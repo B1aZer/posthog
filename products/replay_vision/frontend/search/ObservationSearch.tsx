@@ -68,13 +68,11 @@ function SearchPrompt({
                 value={query}
                 onChange={(event) => onChange(event.target.value)}
                 onKeyDown={(event) => {
-                    // Enter also commits an IME candidate; searching then would send the uncommitted text.
                     if (event.key === 'Enter' && !event.nativeEvent.isComposing && canSubmit) {
                         onSubmit()
                     }
                 }}
                 placeholder="Describe what to look for"
-                // The label shell holds two buttons, whose tooltips would otherwise become the field's name.
                 aria-label="Search observations"
                 disabled={!dataProcessingAccepted}
                 autoComplete="off"

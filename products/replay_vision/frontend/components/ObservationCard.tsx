@@ -422,8 +422,7 @@ export function ObservationDockCard({
 
     return (
         <div className="border rounded p-3 bg-surface-primary space-y-2">
-            {/* Wraps, because the player sidebar can be 20rem wide and the action links do not shrink. */}
-            <div className="flex flex-wrap items-center justify-between gap-2">
+            <div className="flex items-center justify-between gap-2">
                 <div className="flex items-center gap-2 min-w-0">
                     {observation.status !== 'succeeded' && (
                         <ObservationStatusTag status={observation.status} errorReason={observation.error_reason} />
@@ -435,7 +434,7 @@ export function ObservationDockCard({
                         </span>
                     )}
                 </div>
-                <div className="flex items-center gap-2 shrink-0 ml-auto">
+                <div className="flex items-center gap-2 shrink-0">
                     {observation.status === 'succeeded' && result && (
                         <ObservationConfidence result={result} standalone />
                     )}

@@ -58,7 +58,6 @@ function SearchResultCard({
 }): JSX.Element {
     const observation = result.observation
     const snapshot = observation.scanner_snapshot
-    // Back from the detail page returns to the tab this card sits on. The hub has no scanner tab to return to.
     const detailUrl = observationDetailUrl(observation.id, crossScanner ? {} : { tab: ReplayScannerTab.Observations })
     const citedMs = firstCitedTimestampMs(observation)
     // The stored prose keeps its `(t 12)` markers, and the snippet has no seek controls to spend them on.

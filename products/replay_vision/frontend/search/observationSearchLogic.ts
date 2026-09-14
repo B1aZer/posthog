@@ -148,7 +148,6 @@ export const observationSearchLogic = kea<observationSearchLogicType>([
         setQuery: (query: string) => ({ query }),
         setPage: (page: number) => ({ page }),
         search: true,
-        // The "find similar" entry: the query is observation prose, and the source is dropped from the results.
         searchSimilar: (query: string, sourceObservationId: string) => ({ query, sourceObservationId }),
         searchSuccess: (
             results: ObservationSearchResultApi[],
@@ -174,7 +173,6 @@ export const observationSearchLogic = kea<observationSearchLogicType>([
                 clearSearch: () => '',
             },
         ],
-        // Set until the person types or clears, so an edited "find similar" query is an ordinary search again.
         sourceObservationId: [
             null as string | null,
             {
@@ -319,12 +317,12 @@ export const observationSearchLogic = kea<observationSearchLogicType>([
                 })
                 // Drop out-of-order responses. The newest search owns the results.
                 breakpoint()
-                // A clear while the request ran already emptied the card, and a late response must not refill it.
+                // Cleared while in flight: the late response must not refill the card.
                 if (!values.searching) {
                     return
                 }
+                // The source of a "find similar" search is its own nearest neighbour, and it stays out of recents.
                 const results = (response.results ?? []).filter((r) => r.observation.id !== sourceObservationId)
-                // Observation prose stays out of the persisted recent searches, like it stays out of the URL.
                 actions.searchSuccess(results, query, response.truncated ?? false, sourceObservationId === null)
             } catch (error: any) {
                 if (error instanceof Error && isBreakpoint(error)) {
@@ -360,7 +358,7 @@ export const observationSearchLogic = kea<observationSearchLogicType>([
                 router.values.location.pathname,
                 {
                     ...router.values.searchParams,
-                    // A "find similar" query is recording prose, which stays out of the URL (see markSimilarSearchIntent).
+                    // Observation prose stays out of the URL (see markSimilarSearchIntent).
                     q: values.sourceObservationId ? undefined : values.query.trim() || undefined,
                 },
                 router.values.hashParams,
@@ -400,7 +398,6 @@ export const observationSearchLogic = kea<observationSearchLogicType>([
                     actions.search()
                 } else if (!q && values.searchedQuery !== null && values.sourceObservationId === null) {
                     // The URL lost its query (back navigation, or a tab switch dropped it), so show the empty state.
-                    // A "find similar" search never had one there, so it keeps its results.
                     actions.clearSearch()
                 }
             },

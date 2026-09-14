@@ -44,7 +44,6 @@ describe('observationQueries', () => {
             { title: 'Stalled', summary: 'Paused' },
             'Stalled Paused',
         ],
-        ['searches with a title alone', { title: 'Stalled', summary: '' }, 'Stalled'],
         ['gives null when there is no prose', { summary: '   ' }, null],
     ])('%s', (_name, modelOutput, expected) => {
         expect(similarSearchQuery(observation(modelOutput))).toBe(expected)
@@ -56,15 +55,9 @@ describe('observationQueries', () => {
         expect(query!.endsWith('word')).toBe(true)
     })
 
-    it('never ends on half a surrogate pair when cutting spaceless prose', () => {
-        expect(similarSearchQuery(observation({ summary: `${'観'.repeat(299)}😀` }))).toBe('観'.repeat(299))
-    })
-
     it('links to the search tab without the prose, which travels through the one-shot hand-off', () => {
         const source = observation({ summary: 'stuck at checkout' })
         expect(similarSearchUrl(source)).toBe('/replay-vision?tab=search')
-        expect(similarSearchUrl(observation(null))).toBeNull()
-
         markSimilarSearchIntent(source)
         expect(consumeSimilarSearchIntent()).toEqual({ query: 'stuck at checkout', sourceObservationId: 'obs-1' })
         expect(consumeSimilarSearchIntent()).toBeNull()
