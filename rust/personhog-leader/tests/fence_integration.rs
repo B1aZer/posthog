@@ -350,8 +350,8 @@ async fn a_committed_release_produces_the_death_document_above_every_version() {
     .await
     .expect("insert op");
     sqlx::query(
-        "INSERT INTO lifecycle_op_person (op_id, team_id, person_id, person_uuid, role, status) \
-         VALUES ($1, $2, $3, gen_random_uuid(), 'victim', 'sealed')",
+        "INSERT INTO lifecycle_op_person (op_id, team_id, person_id, person_uuid, role, status, mark_active) \
+         VALUES ($1, $2, $3, gen_random_uuid(), 'victim', 'sealed', true)",
     )
     .bind(op)
     .bind(team_id as i32)
@@ -506,8 +506,8 @@ async fn a_revival_is_served_once_the_death_documents_mark_settles() {
     .await
     .expect("insert op");
     sqlx::query(
-        "INSERT INTO lifecycle_op_person (op_id, team_id, person_id, person_uuid, role, status) \
-         VALUES ($1, $2, $3, gen_random_uuid(), 'victim', 'sealed')",
+        "INSERT INTO lifecycle_op_person (op_id, team_id, person_id, person_uuid, role, status, mark_active) \
+         VALUES ($1, $2, $3, gen_random_uuid(), 'victim', 'sealed', true)",
     )
     .bind(op)
     .bind(team_id as i32)
@@ -689,8 +689,8 @@ async fn a_committed_release_derives_the_death_version_above_the_emitted_floor()
     .await
     .expect("insert op");
     sqlx::query(
-        "INSERT INTO lifecycle_op_person (op_id, team_id, person_id, person_uuid, role, status) \
-         VALUES ($1, $2, $3, gen_random_uuid(), 'victim', 'sealed')",
+        "INSERT INTO lifecycle_op_person (op_id, team_id, person_id, person_uuid, role, status, mark_active) \
+         VALUES ($1, $2, $3, gen_random_uuid(), 'victim', 'sealed', true)",
     )
     .bind(op)
     .bind(team_id as i32)
@@ -785,8 +785,8 @@ async fn a_stub_sealed_at_version_zero_can_be_released() {
     .await
     .expect("insert op");
     sqlx::query(
-        "INSERT INTO lifecycle_op_person (op_id, team_id, person_id, person_uuid, role, status) \
-         VALUES ($1, $2, $3, gen_random_uuid(), 'victim', 'sealed')",
+        "INSERT INTO lifecycle_op_person (op_id, team_id, person_id, person_uuid, role, status, mark_active) \
+         VALUES ($1, $2, $3, gen_random_uuid(), 'victim', 'sealed', true)",
     )
     .bind(op)
     .bind(team_id as i32)
@@ -868,8 +868,8 @@ async fn a_ghost_fence_heals_after_a_rejected_write() {
     .await
     .expect("insert op");
     sqlx::query(
-        "INSERT INTO lifecycle_op_person (op_id, team_id, person_id, person_uuid, role, status) \
-         VALUES ($1, $2, $3, gen_random_uuid(), 'victim', 'sealed')",
+        "INSERT INTO lifecycle_op_person (op_id, team_id, person_id, person_uuid, role, status, mark_active) \
+         VALUES ($1, $2, $3, gen_random_uuid(), 'victim', 'sealed', true)",
     )
     .bind(op)
     .bind(team_id as i32)
@@ -962,8 +962,8 @@ async fn a_ghost_fence_heals_after_a_rejected_fence_attempt() {
     .await
     .expect("insert op");
     sqlx::query(
-        "INSERT INTO lifecycle_op_person (op_id, team_id, person_id, person_uuid, role, status) \
-         VALUES ($1, $2, $3, gen_random_uuid(), 'victim', 'sealed')",
+        "INSERT INTO lifecycle_op_person (op_id, team_id, person_id, person_uuid, role, status, mark_active) \
+         VALUES ($1, $2, $3, gen_random_uuid(), 'victim', 'sealed', true)",
     )
     .bind(ghost_op)
     .bind(team_id as i32)
@@ -1053,8 +1053,8 @@ async fn a_live_marked_fence_survives_heal_attempts() {
     .await
     .expect("insert op");
     sqlx::query(
-        "INSERT INTO lifecycle_op_person (op_id, team_id, person_id, person_uuid, role, status) \
-         VALUES ($1, $2, $3, gen_random_uuid(), 'victim', 'sealed')",
+        "INSERT INTO lifecycle_op_person (op_id, team_id, person_id, person_uuid, role, status, mark_active) \
+         VALUES ($1, $2, $3, gen_random_uuid(), 'victim', 'sealed', true)",
     )
     .bind(holder_op)
     .bind(team_id as i32)
@@ -1330,21 +1330,22 @@ async fn the_takeover_scan_rebuilds_exactly_the_partitions_live_fences() {
     }
     let target: i64 = 100;
     let settled: i64 = 101;
-    for (person_id, role, status) in [
-        (fenced_a, "source", "marked"),
-        (fenced_b, "victim", "sealed"),
-        (target, "target", "marked"),
-        (settled, "victim", "deleted"),
+    for (person_id, role, status, active) in [
+        (fenced_a, "source", "marked", true),
+        (fenced_b, "victim", "sealed", true),
+        (target, "target", "marked", true),
+        (settled, "victim", "deleted", false),
     ] {
         sqlx::query(
-            "INSERT INTO lifecycle_op_person (op_id, team_id, person_id, person_uuid, role, status) \
-             VALUES ($1, $2, $3, gen_random_uuid(), $4, $5)",
+            "INSERT INTO lifecycle_op_person (op_id, team_id, person_id, person_uuid, role, status, mark_active) \
+             VALUES ($1, $2, $3, gen_random_uuid(), $4, $5, $6)",
         )
         .bind(op_id)
         .bind(team_id as i32)
         .bind(person_id)
         .bind(role)
         .bind(status)
+        .bind(active)
         .execute(&pool)
         .await
         .expect("insert mark");
@@ -1580,6 +1581,7 @@ async fn seed_target_mark(
     team_id: i64,
     person_id: i64,
     status: &str,
+    mark_active: bool,
 ) {
     // A far-future lease keeps these never-completed ops out of the
     // identity sweeper's abandoned-op scan (it resumes NULL-lease and
@@ -1595,13 +1597,14 @@ async fn seed_target_mark(
     .await
     .expect("insert op");
     sqlx::query(
-        "INSERT INTO lifecycle_op_person (op_id, team_id, person_id, person_uuid, role, status) \
-         VALUES ($1, $2, $3, gen_random_uuid(), 'target', $4)",
+        "INSERT INTO lifecycle_op_person (op_id, team_id, person_id, person_uuid, role, status, mark_active) \
+         VALUES ($1, $2, $3, gen_random_uuid(), 'target', $4, $5)",
     )
     .bind(op)
     .bind(team_id as i32)
     .bind(person_id)
     .bind(status)
+    .bind(mark_active)
     .execute(pool)
     .await
     .expect("insert target mark");
@@ -1621,7 +1624,15 @@ async fn start_marked_fold_harness(seed: CachedPerson, op: &Uuid) -> FenceHarnes
         }),
     )
     .await;
-    seed_target_mark(&pool, op, harness.team_id, harness.person_id, "marked").await;
+    seed_target_mark(
+        &pool,
+        op,
+        harness.team_id,
+        harness.person_id,
+        "marked",
+        true,
+    )
+    .await;
     harness
 }
 
@@ -2124,7 +2135,15 @@ async fn a_fold_whose_op_holds_no_live_target_mark_is_refused() {
     );
 
     // A settled op: the target row was cleared when the saga completed.
-    seed_target_mark(&pool, &op, harness.team_id, harness.person_id, "cleared").await;
+    seed_target_mark(
+        &pool,
+        &op,
+        harness.team_id,
+        harness.person_id,
+        "cleared",
+        false,
+    )
+    .await;
     let status = harness
         .client
         .fold_person_document(with_partition(request.clone(), harness.partition))
@@ -2135,7 +2154,7 @@ async fn a_fold_whose_op_holds_no_live_target_mark_is_refused() {
     // The wrong role: the op holds the person, but not as its target —
     // folding into it would be a saga bug.
     sqlx::query(
-        "UPDATE lifecycle_op_person SET role = 'victim', status = 'marked' WHERE op_id = $1",
+        "UPDATE lifecycle_op_person SET role = 'victim', status = 'marked', mark_active = true WHERE op_id = $1",
     )
     .bind(op)
     .execute(&pool)
@@ -2565,8 +2584,8 @@ async fn a_release_after_a_cache_eviction_still_produces_the_death_document() {
     .await
     .expect("insert op");
     sqlx::query(
-        "INSERT INTO lifecycle_op_person (op_id, team_id, person_id, person_uuid, role, status) \
-         VALUES ($1, $2, $3, $4::uuid, 'victim', 'sealed')",
+        "INSERT INTO lifecycle_op_person (op_id, team_id, person_id, person_uuid, role, status, mark_active) \
+         VALUES ($1, $2, $3, $4::uuid, 'victim', 'sealed', true)",
     )
     .bind(op)
     .bind(team_id as i32)
