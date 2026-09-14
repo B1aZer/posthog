@@ -210,14 +210,17 @@ class NotebookRunWorkflow(PostHogWorkflow):
             if node_run_id is None:
                 return
             if await self._await_cell(input, node_run_id) == NotebookNodeRun.Status.DONE:
+                # Move the cursor off the finished cell straight away, rather than once the
+                # whole plan succeeds. The completion event reads it as the number of cells
+                # that finished, and an interrupt can land in the gap before the next
+                # dispatch. Past the last cell this leaves the plan, which is what tells the
+                # status endpoint no cell is in flight.
+                await self._advance(input, index + 1)
                 continue
             if await self._run_status(input) != NotebookRun.Status.RUNNING:
                 return
             await self._finish(input, NotebookRun.Status.FAILED, failed_node_id=node_id, error=_CELL_STOPPED_ERROR)
             return
-        # Past the last cell, so `current_index` has to leave the plan: the status endpoint
-        # reads it to name the cell in flight, and the completion event counts by it.
-        await self._advance(input, len(input.node_ids))
         await self._finish(input, NotebookRun.Status.DONE)
 
     async def _advance(self, input: NotebookRunInput, index: int) -> None:

@@ -106,9 +106,10 @@ async def test_every_cell_runs_in_document_order() -> None:
 
     assert recorder.dispatched == [0, 1, 2]
     assert [(f.status, f.failed_node_id) for f in recorder.finished] == [(NotebookRun.Status.DONE, None)]
-    # Past the last cell, so the status endpoint stops naming cell 3 as the one in flight
-    # and the completion event counts all three rather than two.
-    assert recorder.advanced == [3]
+    # The cursor moves off each cell as it finishes, so the completion event never counts one
+    # cell short. Past the last cell it leaves the plan, so the status endpoint stops naming
+    # cell 3 as the one in flight.
+    assert recorder.advanced == [1, 2, 3]
 
 
 @pytest.mark.asyncio
@@ -130,6 +131,8 @@ async def test_an_interrupt_stops_the_loop_before_the_next_dispatch() -> None:
 
     assert recorder.dispatched == [0]
     assert recorder.finished == []
+    # Cell "a" finished before the interrupt landed, so the completion event has to count it.
+    assert recorder.advanced == [1]
 
 
 @pytest.mark.asyncio
