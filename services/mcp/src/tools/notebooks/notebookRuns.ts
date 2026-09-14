@@ -28,6 +28,8 @@ export interface NotebookRunOutcome {
     failed_cell?: string
     /** Why the run stopped, when the run itself failed rather than one of its cells. */
     error?: string
+    /** Why the tool stopped waiting, when the run itself is still going. */
+    wait_error?: string
     cells: NotebookRunCellOutcome[]
     starts_sandbox?: boolean
     sandbox_hourly_price?: number | null

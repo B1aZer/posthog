@@ -1,6 +1,7 @@
 import { z } from 'zod'
 
 import type { Schemas } from '@/api/generated'
+import { getPostHogClient } from '@/lib/posthog'
 import type { Context, ToolBase } from '@/tools/types'
 
 import { wrapRunResultAsInformational } from './cellRuns'
@@ -60,8 +61,34 @@ export const runNotebookHandler: ToolBase<typeof NotebooksRunSchema, NotebookRun
         })
     }
 
-    const outcome = await awaitNotebookRun(context, params.notebook_id, notebookPath, started.run_id)
-    return wrapRunResultAsInformational({ ...outcome, ...disclosure })
+    try {
+        const outcome = await awaitNotebookRun(context, params.notebook_id, notebookPath, started.run_id)
+        return wrapRunResultAsInformational({ ...outcome, ...disclosure })
+    } catch (error) {
+        // The run has started and holds the notebook, so a second start answers 409 and no
+        // endpoint lists the run in flight. Throwing here would take the only handle for it
+        // with it, leaving the agent to wait out the run timeout.
+        captureWaitFailure(error)
+        return wrapRunResultAsInformational({
+            run_id: started.run_id,
+            status: 'running',
+            cell_count: started.cell_count,
+            completed_count: 0,
+            cells: [],
+            ...disclosure,
+            wait_error: error instanceof Error ? error.message : String(error),
+            hint: 'Waiting on the run failed, but the run is still going. Call notebooks-run-status with this run_id to keep waiting and to write the results into the document.',
+        })
+    }
+}
+
+/** The soft return bypasses `handleToolError`, the path that normally reports a failure. */
+function captureWaitFailure(error: unknown): void {
+    try {
+        getPostHogClient().captureException(error, undefined, { tag: 'mcp', tool: 'notebooks-run' })
+    } catch {
+        // Observability must never break the request.
+    }
 }
 
 const tool = (): ToolBase<typeof NotebooksRunSchema, NotebookRunOutcome> => ({

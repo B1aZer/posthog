@@ -751,6 +751,20 @@ describe('notebook cell tools', () => {
         expect(result.cells[1].status).toBeNull()
     })
 
+    it('run notebook keeps the run id when the wait fails', async () => {
+        // The start succeeded and the run holds the notebook, so the first status GET
+        // failing must not take the only handle for that run with it. An empty status
+        // queue is the harness's way of failing that call.
+        const state = makeState(RUN_MARKDOWN)
+        const context = createMockContext(state)
+
+        const result: any = await runNotebookHandler(context, { notebook_id: 'aBcD1234', wait: true })
+
+        expect(result).toMatchObject({ run_id: 'nbrun-1', status: 'running' })
+        expect(result.wait_error).toBeTruthy()
+        expect(result.hint).toContain('notebooks-run-status')
+    })
+
     it('run notebook hands the agent the status tool when the budget ends', async () => {
         vi.useFakeTimers()
         const state = makeState(RUN_MARKDOWN)
