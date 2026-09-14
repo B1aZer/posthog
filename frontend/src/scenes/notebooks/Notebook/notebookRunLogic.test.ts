@@ -1,4 +1,5 @@
 import { expectLogic } from 'kea-test-utils'
+import posthog from 'posthog-js'
 
 import { initKeaTests } from '~/test/init'
 
@@ -160,5 +161,26 @@ describe('notebookRunLogic', () => {
 
         expect(notebooksRunsInterruptCreate).toHaveBeenCalledWith(expect.any(String), SHORT_ID, 'nbrun-1')
         expect(logic.values.isRunning).toBe(false)
+    })
+
+    it('reports a stopped run once when two polls read the same outcome', async () => {
+        // The backend marks the run terminal before the interrupt call returns, so the poll that
+        // follows that call reads an outcome a scheduled poll already reported.
+        const captureSpy = jest.spyOn(posthog, 'capture')
+        jest.mocked(notebooksRunsRetrieve).mockResolvedValueOnce(
+            runStatus('running', [cell('s1', 'running', 'cell-1')])
+        )
+        logic = notebookRunLogic({ shortId: SHORT_ID })
+        logic.mount()
+        await expectLogic(logic, () => logic!.actions.startRun()).toDispatchActions(['setRun'])
+
+        jest.mocked(notebooksRunsRetrieve).mockResolvedValue(
+            runStatus('interrupted', [cell('s1', 'interrupted', 'cell-1')])
+        )
+        await expectLogic(logic, () => logic!.actions.pollRun()).toDispatchActions(['runFinished'])
+        await expectLogic(logic, () => logic!.actions.interruptRun()).toFinishAllListeners()
+
+        expect(captureSpy.mock.calls.filter(([event]) => event === 'notebook run all finished')).toHaveLength(1)
+        captureSpy.mockRestore()
     })
 })

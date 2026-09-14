@@ -235,6 +235,7 @@ export const notebookRunLogic = kea<notebookRunLogicType>([
                     }
                     cache.seenCellRunIds = new Set<string>()
                     cache.pollFailures = 0
+                    cache.finishedRunId = null
                     actions.setStarting(false)
                     actions.pollRun()
                     cache.disposables.add(() => {
@@ -283,6 +284,14 @@ export const notebookRunLogic = kea<notebookRunLogicType>([
             },
             runFinished: ({ run }) => {
                 actions.stopPolling()
+                // The backend marks the run terminal before the interrupt call finishes stopping
+                // the current cell, so a scheduled poll and the poll that follows that call can
+                // both read the same outcome. Report it once, because the backend records the
+                // terminal state once.
+                if (cache.finishedRunId === run.run_id) {
+                    return
+                }
+                cache.finishedRunId = run.run_id
                 posthog.capture(
                     ...buildNotebookRunFinishedEvent(
                         props.shortId,
