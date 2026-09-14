@@ -49,6 +49,7 @@ CELL_POLL_INTERVAL_SECONDS = 2
 DISPATCH_RETRY_BUDGET = timedelta(minutes=2)
 
 _CELL_STOPPED_ERROR = "A cell did not finish, so the run stopped there."
+_NOTEBOOK_DELETED_ERROR = "The notebook was deleted, so the run stopped."
 _RUN_TIMEOUT_ERROR = "The run took longer than an hour, so it stopped."
 _RUN_ABANDONED_ERROR = "The run stopped because of an internal error."
 _DISPATCH_FAILED_ERROR = "The run could not start a cell."
@@ -103,7 +104,15 @@ def read_notebook_run_status_activity(input: NotebookRunInput) -> str:
     notebook_run = _load_run(input.team_id, input.notebook_run_id)
     # A missing record can only mean somebody deleted it, which tells the workflow the same
     # thing an interrupt does: stop.
-    return notebook_run.status if notebook_run is not None else NotebookRun.Status.INTERRUPTED
+    if notebook_run is None:
+        return NotebookRun.Status.INTERRUPTED
+    if notebook_run.notebook.deleted:
+        # A soft-deleted notebook is hidden from every endpoint that could read or stop this
+        # run, so nobody can end it by hand any more. End it here rather than keep dispatching
+        # cells of a document the user threw away. The loop then reads what this wrote: past a
+        # cell it stops, and inside one it stops that cell first.
+        finish_notebook_run(notebook_run, NotebookRun.Status.INTERRUPTED, error=_NOTEBOOK_DELETED_ERROR)
+    return notebook_run.status
 
 
 @activity.defn(name="notebook-run-advance")

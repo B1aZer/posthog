@@ -13,6 +13,7 @@ from posthog.models.utils import UUIDT
 
 from products.notebooks.backend.models import Notebook, NotebookNodeRun, NotebookRun
 from products.notebooks.backend.notebook_run import node_run_request_for
+from products.notebooks.backend.temporal.notebook_run import NotebookRunInput, read_notebook_run_status_activity
 
 _RUN_CELLS = (
     '<SQLV2 nodeId="s1" code="select 1" returnVariable="first" />\n\n'
@@ -124,6 +125,21 @@ class TestNotebookRunEndpoints(APIBaseTest):
             stranded = NotebookRun.objects.get(id=stranded_id)
         assert stranded.status == NotebookRun.Status.FAILED
         assert stranded.finished_at is not None
+
+    def test_a_run_stops_when_its_notebook_is_deleted(self, _start, _flag) -> None:
+        # A soft-deleted notebook is hidden from the run's own status and interrupt
+        # endpoints, so the loop is the only thing left that can end the run.
+        run_id = self.client.post(self.runs_url, data={}, format="json").json()["run_id"]
+        self.notebook.deleted = True
+        self.notebook.save(update_fields=["deleted"])
+
+        status = read_notebook_run_status_activity(
+            NotebookRunInput(notebook_run_id=run_id, team_id=self.team.id, node_ids=["s1", "p1"])
+        )
+
+        assert status == NotebookRun.Status.INTERRUPTED
+        with team_scope(self.team.id):
+            assert NotebookRun.objects.get(id=run_id).status == NotebookRun.Status.INTERRUPTED
 
     def test_variables_are_saved_before_the_run_snapshots_them(self, _start, _flag) -> None:
         response = self.client.post(
