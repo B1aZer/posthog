@@ -19,7 +19,7 @@ export const NotebookRunAllButton = (
     props: Pick<LemonButtonProps, 'children' | 'size' | 'type'>
 ): JSX.Element | null => {
     const { featureFlags } = useValues(featureFlagLogic)
-    const { content, shortId, isShared, canEditNotebook } = useValues(notebookLogic)
+    const { content, shortId, isShared, canEditNotebook, isLocalOnly } = useValues(notebookLogic)
     const { isRunning, isStarting, isInterrupting, progressLabel } = useValues(notebookRunLogic({ shortId }))
     const { startRun, interruptRun } = useActions(notebookRunLogic({ shortId }))
 
@@ -29,9 +29,12 @@ export const NotebookRunAllButton = (
     // document and would run a version the reader is not looking at.
     const canRun = !isShared && canEditNotebook
 
-    // Only a markdown notebook with something to run gets the button at all.
+    // Only a markdown notebook with something to run gets the button at all. A local-only
+    // notebook, which is a scratchpad, a canvas, or a template, never reaches the server, so the
+    // run would plan from an empty document and be refused.
     if (
         !canRun ||
+        isLocalOnly ||
         !isKernelUiEnabled(featureFlags) ||
         !isMarkdownNotebookContent(content) ||
         !hasRunnableV2Nodes(content)

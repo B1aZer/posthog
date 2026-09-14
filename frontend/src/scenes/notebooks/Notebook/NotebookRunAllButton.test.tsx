@@ -94,4 +94,23 @@ describe('NotebookRunAllButton', () => {
             expect(renderButton() !== null).toBe(expectsControl)
         }
     )
+
+    it('hides Run all on a scratchpad, whose document the server never holds', async () => {
+        const scratchpadProps: NotebookLogicProps = { shortId: 'scratchpad', mode: 'notebook' }
+        logic = notebookLogic(scratchpadProps)
+        logic.mount()
+        logic.actions.loadNotebook()
+        await expectLogic(logic).toDispatchActions(['loadNotebookSuccess']).toFinishAllListeners()
+        // The cells are real, so only the local-only gate can hide the control here.
+        logic.actions.setLocalContent(CONTENT)
+        await expectLogic(logic).toFinishAllListeners()
+
+        const { container } = render(
+            <BindLogic logic={notebookLogic} props={scratchpadProps}>
+                <NotebookRunAllButton />
+            </BindLogic>
+        )
+
+        expect(container.querySelector('[data-attr="notebook-run-all"]')).toBeNull()
+    })
 })
