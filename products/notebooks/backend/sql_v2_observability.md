@@ -107,7 +107,7 @@ A whole-notebook run (`notebook_run.md`) has its own terminal recorder, `sql_v2_
 - **`posthog_notebooks_notebook_run_seconds{outcome,trigger}`** — end-to-end duration, run-row `created_at` to the terminal transition, with an OTLP twin.
 - **`notebook run completed`** PostHog event with `trigger`, `outcome`, `cell_count`, `python_cell_count`, `completed_count`, `duration_ms`, and `notebook_short_id`.
 
-The workflow logs each step with `notebook_run_id`, the cell index, and the `node_id`. It never logs cell code.
+The workflow logs each step with `notebook_run_id`, the cell index, and the `node_id`: the cell's dispatch, the state it reached, and the cell a run stopped at. A dispatch that gives up carries the Temporal activity's own identifiers too. It never logs cell code.
 
 Read these four things from them: adoption by `trigger`; the share of runs that end `done`; where runs stop, from `failed_node_id`'s position and the cell's type; and the duration spread by `cell_count`, which says whether the MCP tool's 45 second budget covers a typical notebook or whether the status tool is the common path.
 

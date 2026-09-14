@@ -12,6 +12,7 @@ between calls, so no worker slot is held while a cell works.
 
 import asyncio
 from datetime import timedelta
+from typing import Any
 
 from temporalio import activity, common, workflow
 from temporalio.exceptions import ApplicationError, WorkflowAlreadyStartedError
@@ -196,12 +197,18 @@ class NotebookRunWorkflow(PostHogWorkflow):
         except TimeoutError:
             # The watchdog. Write the outcome first, so the record never stays RUNNING, then
             # release the cell that is still holding the notebook's slot.
+            workflow.logger.warning("Notebook run timed out", extra=self._log_context(input))
             await self._finish(input, NotebookRun.Status.FAILED, error=_RUN_TIMEOUT_ERROR, outcome=OUTCOME_TIMED_OUT)
             await self._stop_cell(input)
         except Exception:
+            workflow.logger.exception("Notebook run stopped on an unexpected error", extra=self._log_context(input))
             await self._finish(input, NotebookRun.Status.FAILED, error=_RUN_ABANDONED_ERROR)
             await self._stop_cell(input)
             raise
+
+    def _log_context(self, input: NotebookRunInput, **extra: Any) -> dict[str, Any]:
+        """The identifiers every line of this workflow carries. Never a cell's code."""
+        return {"notebook_run_id": input.notebook_run_id, "team_id": input.team_id, **extra}
 
     async def _walk(self, input: NotebookRunInput) -> None:
         for index, node_id in enumerate(input.node_ids):
@@ -211,7 +218,12 @@ class NotebookRunWorkflow(PostHogWorkflow):
             node_run_id = await self._dispatch(input, index, node_id)
             if node_run_id is None:
                 return
-            if await self._await_cell(input, node_run_id) == NotebookNodeRun.Status.DONE:
+            status = await self._await_cell(input, node_run_id)
+            workflow.logger.info(
+                "Notebook cell reached a terminal state",
+                extra=self._log_context(input, cell_index=index, node_id=node_id, cell_status=status),
+            )
+            if status == NotebookNodeRun.Status.DONE:
                 # Move the cursor off the finished cell straight away, rather than once the
                 # whole plan succeeds. The completion event reads it as the number of cells
                 # that finished, and an interrupt can land in the gap before the next
@@ -221,6 +233,10 @@ class NotebookRunWorkflow(PostHogWorkflow):
                 continue
             if await self._run_status(input) != NotebookRun.Status.RUNNING:
                 return
+            workflow.logger.warning(
+                "Notebook run stopped at a cell",
+                extra=self._log_context(input, cell_index=index, node_id=node_id, cell_status=status),
+            )
             await self._finish(input, NotebookRun.Status.FAILED, failed_node_id=node_id, error=_CELL_STOPPED_ERROR)
             return
         await self._finish(input, NotebookRun.Status.DONE)
@@ -243,7 +259,7 @@ class NotebookRunWorkflow(PostHogWorkflow):
 
     async def _dispatch(self, input: NotebookRunInput, index: int, node_id: str) -> str | None:
         try:
-            return await workflow.execute_activity(
+            node_run_id = await workflow.execute_activity(
                 dispatch_notebook_cell_activity,
                 NotebookRunCellInput(notebook_run_id=input.notebook_run_id, team_id=input.team_id, index=index),
                 # One attempt is a connection lookup, a slot, a row, and a hand-off, so a
@@ -262,11 +278,20 @@ class NotebookRunWorkflow(PostHogWorkflow):
             # An attempt can start a cell and then lose its answer, and this path never learns
             # that cell's id. `stop_current_cell` finds the run's cell by query rather than by
             # id, so the orphan is still reachable. With nothing in flight the stop is a no-op.
+            workflow.logger.warning(
+                "Notebook cell dispatch failed",
+                extra=self._log_context(input, cell_index=index, node_id=node_id, **self._activity_error_properties(e)),
+            )
             await self._finish(
                 input, NotebookRun.Status.FAILED, failed_node_id=node_id, error=_dispatch_error_message(e)
             )
             await self._stop_cell(input)
             return None
+        workflow.logger.info(
+            "Notebook cell dispatched",
+            extra=self._log_context(input, cell_index=index, node_id=node_id, node_run_id=node_run_id),
+        )
+        return node_run_id
 
     async def _await_cell(self, input: NotebookRunInput, node_run_id: str) -> str:
         check = NotebookRunCellCheckInput(node_run_id=node_run_id, team_id=input.team_id)
