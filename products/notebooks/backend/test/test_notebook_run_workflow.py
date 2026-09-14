@@ -186,3 +186,25 @@ async def test_a_lost_dispatch_stops_the_cell_it_may_have_started() -> None:
     assert [(f.status, f.failed_node_id) for f in recorder.finished] == [(NotebookRun.Status.FAILED, "a")]
     assert recorder.stopped == 1
     assert recorder.dispatched == [0]
+
+
+@pytest.mark.asyncio
+async def test_an_interrupt_during_a_dispatch_stops_the_cell_it_started() -> None:
+    # The endpoint stops the run's cell once. An interrupt that lands before the dispatch
+    # writes that row finds nothing, reports success, and the cell runs on. The poll loop is
+    # the only thing that sees the run again while a cell is in flight.
+    recorder = _Recorder(
+        cell_statuses={0: [NotebookNodeRun.Status.RUNNING, NotebookNodeRun.Status.DONE]},
+        run_statuses=[
+            NotebookRun.Status.RUNNING,
+            NotebookRun.Status.INTERRUPTED,
+            NotebookRun.Status.INTERRUPTED,
+        ],
+    )
+
+    await _run_workflow(recorder, ["a", "b"])
+
+    assert recorder.stopped == 1
+    assert recorder.dispatched == [0]
+    # The endpoint already wrote the outcome, so the loop must leave the record alone.
+    assert recorder.finished == []

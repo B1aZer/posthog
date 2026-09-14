@@ -38,7 +38,7 @@ Rules the loop follows:
 - The plan freezes the whole cell at start — its code, its connection, and its raw-SQL flag — not just which cells run. A cell added while the run works does not join it. A cell edited or deleted while it works still executes what the plan captured, and a deleted cell's result has no cell to land in.
 - Freezing the code is a security boundary, not only a consistency one. Notebook write access and query access are separate grants, so if the run re-read the document at dispatch, an editor who cannot run queries could swap a later cell and have it execute under the initiator's access. The plan is read once, in the request that already passed the query-access check.
 - The run stops at the first cell that does not finish `done`.
-- Before each dispatch the workflow reads the run's status. That is how an interrupt reaches the loop.
+- The workflow reads the run's status before each dispatch, and again on every poll of a cell in flight. That is how an interrupt reaches the loop. The second read matters for an interrupt that lands while a cell is being dispatched: the endpoint finds no cell to stop, so the loop stops it instead.
 - A dispatch that meets a busy notebook (409) or a full project (429) retries for two minutes. A person clicking Run on one cell is the case worth waiting out.
 - A dispatch that gives up ends the run and then stops whatever cell the lost attempt may have started. That attempt never reported an id, so the stop looks for the run's cell that is still running instead.
 - The whole run is bounded at one hour. On timeout the workflow writes `failed` with the `timed_out` outcome and stops the cell still in flight.

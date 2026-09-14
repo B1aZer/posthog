@@ -275,6 +275,12 @@ class NotebookRunWorkflow(PostHogWorkflow):
             )
             if status != NotebookNodeRun.Status.RUNNING:
                 return status
+            if await self._run_status(input) != NotebookRun.Status.RUNNING:
+                # An interrupt that lands while this cell is being dispatched finds no row to
+                # stop, so the endpoint reports success and the cell runs on. Nothing else
+                # re-reads the run once a cell is in flight, so stop it from here.
+                await self._stop_cell(input)
+                return NotebookNodeRun.Status.INTERRUPTED
             await workflow.sleep(timedelta(seconds=CELL_POLL_INTERVAL_SECONDS))
 
     async def _stop_cell(self, input: NotebookRunInput) -> None:
