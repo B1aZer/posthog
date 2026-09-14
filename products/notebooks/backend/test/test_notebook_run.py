@@ -1,7 +1,10 @@
+from datetime import timedelta
 from typing import Any
 
 from posthog.test.base import APIBaseTest
 from unittest.mock import patch
+
+from django.utils.timezone import now
 
 from posthog.models.scoping import team_scope
 from posthog.models.utils import UUIDT
@@ -144,6 +147,40 @@ class TestNotebookRunEndpoints(APIBaseTest):
         assert payload["current_node_id"] == "s1"
         assert [(cell["node_id"], cell["status"]) for cell in payload["cells"]] == [("s1", "done"), ("p1", None)]
         assert payload["cells"][0]["run_id"] == str(node_run.id)
+
+    def test_status_reports_the_newest_attempt_of_a_retried_cell(self, _start, _flag) -> None:
+        # A retried dispatch takes the slot before it writes the row, so one cell can end up
+        # with two rows. The status must name the attempt that ran last.
+        run_id = self.client.post(self.runs_url, data={}, format="json").json()["run_id"]
+        with team_scope(self.team.id):
+            notebook_run = NotebookRun.objects.get(id=run_id)
+            superseded = NotebookNodeRun.objects.create(
+                team=self.team,
+                notebook=self.notebook,
+                notebook_run=notebook_run,
+                node_id="s1",
+                code="select 1",
+                status=NotebookNodeRun.Status.FAILED,
+                error="Gone.",
+            )
+            newest = NotebookNodeRun.objects.create(
+                team=self.team,
+                notebook=self.notebook,
+                notebook_run=notebook_run,
+                node_id="s1",
+                code="select 1",
+                status=NotebookNodeRun.Status.DONE,
+            )
+            # created_at is auto_now_add, so pin the two apart rather than trust the order
+            # two creates in the same microsecond happen to land in.
+            NotebookNodeRun.objects.filter(id=superseded.id).update(created_at=now() - timedelta(minutes=5))
+            NotebookNodeRun.objects.filter(id=newest.id).update(created_at=now())
+
+        payload = self.client.get(f"{self.runs_url}{run_id}/").json()
+
+        cell = payload["cells"][0]
+        assert cell["node_id"] == "s1"
+        assert (cell["run_id"], cell["status"], cell["error"]) == (str(newest.id), "done", None)
 
     def test_a_cell_error_from_an_unreachable_source_is_withheld(self, _start, _flag) -> None:
         # Notebook plus query access does not imply source access, and an engine error can

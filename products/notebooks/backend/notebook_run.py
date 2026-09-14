@@ -10,6 +10,7 @@ Document order is dependency order: a cell can only read exports of earlier cell
 the rule the editor's staleness chain already relies on. So the plan needs no sorting.
 """
 
+from collections.abc import Mapping
 from typing import Any, TypedDict
 from uuid import UUID
 
@@ -188,13 +189,18 @@ def notebook_run_status(notebook_run: NotebookRun) -> dict[str, Any]:
     to show from the existing run-result endpoint.
     """
     plan: list[PlannedCell] = notebook_run.cell_plan or []
-    latest_by_node: dict[str, NotebookNodeRun] = {}
-    for node_run in (
-        NotebookNodeRun.objects.for_team(notebook_run.team_id)
+    # Only the six small fields the cells below read. A cell's envelope holds its whole
+    # result, up to megabytes of media, and a client polls this endpoint until the run is
+    # terminal. DISTINCT ON drops the superseded attempts in Postgres rather than reading
+    # them to discard them here.
+    latest_by_node: dict[str, Mapping[str, Any]] = {
+        row["node_id"]: row
+        for row in NotebookNodeRun.objects.for_team(notebook_run.team_id)
         .filter(notebook_run=notebook_run)
         .order_by("node_id", "-created_at")
-    ):
-        latest_by_node.setdefault(node_run.node_id, node_run)
+        .distinct("node_id")
+        .values("id", "node_id", "status", "error", "connection_id", "send_raw_query")
+    }
 
     cells = []
     for cell in plan:
@@ -204,13 +210,13 @@ def notebook_run_status(notebook_run: NotebookRun) -> dict[str, Any]:
                 "node_id": cell["node_id"],
                 "cell_type": cell["cell_type"],
                 "dataframe_name": cell["dataframe_name"],
-                "run_id": str(latest.id) if latest else None,
-                "status": latest.status if latest else None,
-                "error": (latest.error or None) if latest else None,
+                "run_id": str(latest["id"]) if latest else None,
+                "status": latest["status"] if latest else None,
+                "error": (latest["error"] or None) if latest else None,
                 # Not part of the response: the view reads it to decide whether this
                 # caller may see the cell's error, which can carry engine detail.
-                "connection_id": str(latest.connection_id) if latest and latest.connection_id else None,
-                "send_raw_query": bool(latest.send_raw_query) if latest else False,
+                "connection_id": str(latest["connection_id"]) if latest and latest["connection_id"] else None,
+                "send_raw_query": bool(latest["send_raw_query"]) if latest else False,
             }
         )
     current = plan[notebook_run.current_index] if notebook_run.current_index < len(plan) else None
