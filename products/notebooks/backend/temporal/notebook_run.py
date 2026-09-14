@@ -51,6 +51,7 @@ _RUN_ABANDONED_ERROR = "The run stopped because of an internal error."
 _DISPATCH_FAILED_ERROR = "The run could not start a cell."
 _RETRYABLE_DISPATCH = "NotebookRunDispatchRetryable"
 _UNRECOVERABLE = "NotebookRunUnrecoverable"
+_READABLE_DISPATCH_ERRORS = frozenset({_RETRYABLE_DISPATCH, _UNRECOVERABLE})
 
 
 @frozen
@@ -307,10 +308,16 @@ class NotebookRunWorkflow(PostHogWorkflow):
 
 
 def _dispatch_error_message(error: BaseException) -> str:
-    """The sentence a user reads when a cell never started."""
+    """The sentence a user reads when a cell never started.
+
+    Only the two types the dispatch activity raises itself carry a message written for a
+    reader. Temporal wraps every other escaping exception in an ApplicationError that keeps
+    the original text, so a Redis or database failure would otherwise put its own detail
+    into a field the run status endpoint serves.
+    """
     cause: BaseException | None = error
     while cause is not None:
-        if isinstance(cause, ApplicationError) and cause.message:
+        if isinstance(cause, ApplicationError) and cause.message and cause.type in _READABLE_DISPATCH_ERRORS:
             return cause.message
         cause = cause.__cause__
     return _DISPATCH_FAILED_ERROR

@@ -3,16 +3,21 @@ import uuid
 import pytest
 
 from temporalio import activity
+from temporalio.exceptions import ApplicationError
 from temporalio.testing import WorkflowEnvironment
 from temporalio.worker import UnsandboxedWorkflowRunner, Worker
 
 from products.notebooks.backend.models import NotebookNodeRun, NotebookRun
 from products.notebooks.backend.temporal.notebook_run import (
+    _DISPATCH_FAILED_ERROR,
+    _RETRYABLE_DISPATCH,
+    _UNRECOVERABLE,
     NotebookRunCellCheckInput,
     NotebookRunCellInput,
     NotebookRunFinishInput,
     NotebookRunInput,
     NotebookRunWorkflow,
+    _dispatch_error_message,
 )
 
 
@@ -135,3 +140,31 @@ async def test_a_cell_is_polled_until_it_reaches_a_terminal_state() -> None:
 
     assert recorder.checks == ["run-0", "run-0", "run-0"]
     assert [f.status for f in recorder.finished] == [NotebookRun.Status.DONE]
+
+
+@pytest.mark.parametrize(
+    "cause,expected",
+    [
+        (
+            ApplicationError("The notebook is already running a cell.", type=_RETRYABLE_DISPATCH),
+            "The notebook is already running a cell.",
+        ),
+        (
+            ApplicationError("Failed to start run.", type=_UNRECOVERABLE),
+            "Failed to start run.",
+        ),
+        # Temporal turns an escaping Redis or database error into an ApplicationError that
+        # keeps the original text, and the run status endpoint serves this field.
+        (
+            ApplicationError('connection to server at "db.internal", port 5432 failed', type="OperationalError"),
+            _DISPATCH_FAILED_ERROR,
+        ),
+    ],
+)
+def test_only_the_dispatch_errors_written_for_a_reader_reach_the_run_record(
+    cause: ApplicationError, expected: str
+) -> None:
+    activity_error = RuntimeError("Activity task failed")
+    activity_error.__cause__ = cause
+
+    assert _dispatch_error_message(activity_error) == expected
