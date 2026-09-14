@@ -29,9 +29,11 @@ class _Recorder:
         *,
         cell_statuses: dict[int, list[str]] | None = None,
         run_statuses: list[str] | None = None,
+        dispatch_failures: set[int] | None = None,
     ) -> None:
         self.cell_statuses = cell_statuses or {}
         self.run_statuses = list(run_statuses or [])
+        self.dispatch_failures = dispatch_failures or set()
         self.dispatched: list[int] = []
         self.finished: list[NotebookRunFinishInput] = []
         self.checks: list[str] = []
@@ -55,6 +57,8 @@ class _Recorder:
         @activity.defn(name="notebook-run-dispatch-cell")
         async def dispatch_cell(input: NotebookRunCellInput) -> str:
             recorder.dispatched.append(input.index)
+            if input.index in recorder.dispatch_failures:
+                raise ApplicationError("The dispatch lost its answer.", type=_UNRECOVERABLE, non_retryable=True)
             node_run_id = f"run-{input.index}"
             recorder._pending[node_run_id] = list(
                 recorder.cell_statuses.get(input.index, [NotebookNodeRun.Status.DONE])
@@ -168,3 +172,17 @@ def test_only_the_dispatch_errors_written_for_a_reader_reach_the_run_record(
     activity_error.__cause__ = cause
 
     assert _dispatch_error_message(activity_error) == expected
+
+
+@pytest.mark.asyncio
+async def test_a_lost_dispatch_stops_the_cell_it_may_have_started() -> None:
+    # An attempt can start a cell and then lose its answer, so the run never learns that
+    # cell's id. Without a stop on this path the cell keeps running under a failed run, and a
+    # direct one would hold the notebook's slot with nothing able to end it.
+    recorder = _Recorder(dispatch_failures={0})
+
+    await _run_workflow(recorder, ["a", "b"])
+
+    assert [(f.status, f.failed_node_id) for f in recorder.finished] == [(NotebookRun.Status.FAILED, "a")]
+    assert recorder.stopped == 1
+    assert recorder.dispatched == [0]

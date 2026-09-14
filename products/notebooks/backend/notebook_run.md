@@ -40,6 +40,7 @@ Rules the loop follows:
 - The run stops at the first cell that does not finish `done`.
 - Before each dispatch the workflow reads the run's status. That is how an interrupt reaches the loop.
 - A dispatch that meets a busy notebook (409) or a full project (429) retries for two minutes. A person clicking Run on one cell is the case worth waiting out.
+- A dispatch that gives up ends the run and then stops whatever cell the lost attempt may have started. That attempt never reported an id, so the stop looks for the run's cell that is still running instead.
 - The whole run is bounded at one hour. On timeout the workflow writes `failed` with the `timed_out` outcome and stops the cell still in flight.
 
 ## Endpoints

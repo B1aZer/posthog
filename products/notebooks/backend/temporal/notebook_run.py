@@ -253,9 +253,14 @@ class NotebookRunWorkflow(PostHogWorkflow):
                 ),
             )
         except Exception as e:
+            # Write the outcome first, so the record never stays RUNNING, then release the cell.
+            # An attempt can start a cell and then lose its answer, and this path never learns
+            # that cell's id. `stop_current_cell` finds the run's cell by query rather than by
+            # id, so the orphan is still reachable. With nothing in flight the stop is a no-op.
             await self._finish(
                 input, NotebookRun.Status.FAILED, failed_node_id=node_id, error=_dispatch_error_message(e)
             )
+            await self._stop_cell(input)
             return None
 
     async def _await_cell(self, input: NotebookRunInput, node_run_id: str) -> str:
