@@ -46,6 +46,9 @@ class TestNotebookRunEndpoints(APIBaseTest):
         assert response.status_code == 200, response.json()
         payload = response.json()
         assert payload["cell_count"] == 2
+        # The plan holds a Python cell and no kernel is up, so the response has to price the
+        # sandbox this run starts.
+        assert payload["starts_sandbox"] is True
         with team_scope(self.team.id):
             notebook_run = NotebookRun.objects.get(id=payload["run_id"])
         assert [cell["node_id"] for cell in notebook_run.cell_plan] == ["s1", "p1"]

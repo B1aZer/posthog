@@ -14,6 +14,7 @@ from ..notebook_run import (
     get_notebook_run as get_notebook_run,
     interrupt_notebook_run as interrupt_notebook_run,
     notebook_run_status as notebook_run_status,
+    sandbox_disclosure_for_run as sandbox_disclosure_for_run,
     start_notebook_run as start_notebook_run,
 )
 from ..temporal.notebook_run import (

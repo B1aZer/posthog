@@ -76,12 +76,10 @@ class NotebookRunCellInvalid(Exception):
 
 @frozen
 class NotebookRunStart:
-    """What the caller has to tell the user once a whole-notebook run is on its way."""
+    """The run record this request created, and how many cells it froze into its plan."""
 
     notebook_run: NotebookRun
     cell_count: int
-    starts_sandbox: bool
-    sandbox_hourly_price: float | None
 
 
 def plan_notebook_cells(notebook: Notebook) -> list[PlannedCell]:
@@ -137,11 +135,12 @@ def start_notebook_run(
     *,
     trigger: str,
 ) -> NotebookRunStart:
-    """Create the run record for `notebook` and price the sandbox it may start.
+    """Create the run record for `notebook`.
 
     The caller saves any new variables before calling this, so the snapshot the run binds
     matches the document a reader will compare the results against. Starting the workflow is
-    the caller's last step, once the record exists.
+    the caller's last step, once the record exists, and `sandbox_disclosure_for_run` prices
+    the run after that.
     """
     cell_plan = plan_notebook_cells(notebook)
     if not cell_plan:
@@ -165,17 +164,21 @@ def start_notebook_run(
         # The partial unique constraint, not a lock: one running row per notebook.
         raise NotebookRunAlreadyRunning(_ALREADY_RUNNING) from e
 
-    starts_sandbox, hourly_price = sandbox_disclosure(
-        notebook,
-        user,
-        uses_sandbox=any(cell["cell_type"] == "python" for cell in cell_plan),
-    )
-    return NotebookRunStart(
-        notebook_run=notebook_run,
-        cell_count=len(cell_plan),
-        starts_sandbox=starts_sandbox,
-        sandbox_hourly_price=hourly_price,
-    )
+    return NotebookRunStart(notebook_run=notebook_run, cell_count=len(cell_plan))
+
+
+def sandbox_disclosure_for_run(
+    notebook: Notebook, user: User | None, notebook_run: NotebookRun
+) -> tuple[bool, float | None]:
+    """Whether this run starts a paid sandbox, and what an hour of it costs.
+
+    Ask this after the run record is committed, never in the transaction that writes it. The
+    insert locks the notebook row for the foreign key, and this call reads the sandbox over
+    the network, so under that lock every editor save on the notebook waits for the sandbox
+    backend to answer.
+    """
+    plan: list[PlannedCell] = notebook_run.cell_plan
+    return sandbox_disclosure(notebook, user, uses_sandbox=any(cell["cell_type"] == "python" for cell in plan))
 
 
 def node_run_request_for(notebook_run: NotebookRun, index: int) -> NodeRunRequest:
@@ -371,6 +374,7 @@ __all__ = [
     "node_run_request_for",
     "notebook_run_status",
     "plan_notebook_cells",
+    "sandbox_disclosure_for_run",
     "start_notebook_run",
     "stop_current_cell",
 ]

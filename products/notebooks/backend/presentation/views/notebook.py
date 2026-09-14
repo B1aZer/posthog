@@ -79,6 +79,7 @@ from products.notebooks.backend.facade.notebook_run import (
     get_notebook_run,
     interrupt_notebook_run,
     notebook_run_status,
+    sandbox_disclosure_for_run,
     start_notebook_run,
     start_notebook_run_workflow,
 )
@@ -1706,13 +1707,17 @@ class NotebookViewSet(TeamAndOrgViewSetMixin, AccessControlViewSetMixin, ForbidD
             finish_notebook_run(start.notebook_run, NotebookRun.Status.FAILED, error="Failed to start the run.")
             return Response({"detail": "Failed to start the run."}, status=503)
 
+        # Priced here rather than with the record: the insert locks the notebook row for the
+        # foreign key, and this asks the sandbox backend over the network, so under that lock
+        # every editor save on the notebook would wait for the answer.
+        starts_sandbox, sandbox_hourly_price = sandbox_disclosure_for_run(notebook, user, start.notebook_run)
         return Response(
             NotebookRunStartResponseSerializer(
                 {
                     "run_id": str(start.notebook_run.id),
                     "cell_count": start.cell_count,
-                    "starts_sandbox": start.starts_sandbox,
-                    "sandbox_hourly_price": start.sandbox_hourly_price,
+                    "starts_sandbox": starts_sandbox,
+                    "sandbox_hourly_price": sandbox_hourly_price,
                 }
             ).data
         )
